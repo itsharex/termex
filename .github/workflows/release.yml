@@ -1,0 +1,188 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: mac-aarch64
+            os: macos-latest
+            rust-target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+            bundles: dmg
+
+          - label: mac-x86_64
+            os: macos-latest
+            rust-target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
+            bundles: dmg
+
+          - label: win-x64
+            os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            args: ""
+            bundles: msi,nsis
+
+          - label: linux-x86_64
+            os: ubuntu-22.04
+            rust-target: x86_64-unknown-linux-gnu
+            args: ""
+            bundles: deb,rpm,appimage
+
+          - label: linux-aarch64
+            os: ubuntu-24.04-arm
+            rust-target: aarch64-unknown-linux-gnu
+            args: ""
+            bundles: deb,rpm
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Linux dependencies ──────────────────────────────────
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # ── Windows WiX Toolset ─────────────────────────────────
+      - name: Install WiX Toolset (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $wixDir = "$env:USERPROFILE\.wix"
+          $wixBin = "$wixDir\wix311\tools"
+          New-Item -ItemType Directory -Force -Path $wixDir | Out-Null
+          $maxRetries = 3
+          for ($i = 1; $i -le $maxRetries; $i++) {
+            try {
+              Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" `
+                -OutFile "$wixDir\wix.zip" -TimeoutSec 120
+              break
+            } catch {
+              if ($i -eq $maxRetries) { throw }
+              Start-Sleep -Seconds 10
+            }
+          }
+          Expand-Archive "$wixDir\wix.zip" -DestinationPath "$wixDir\wix311\tools" -Force
+          echo "$wixBin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # ── Toolchain ───────────────────────────────────────────
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      # ── Build & Release ─────────────────────────────────────
+      - name: Build & upload release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS code signing (uncomment when ready)
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Termex ${{ github.ref_name }}"
+          releaseBody: "See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      # ── macOS GateKeeper fix script ─────────────────────────
+      - name: Upload GateKeeper fix (macOS Intel)
+        if: matrix.label == 'mac-x86_64'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > fix-macos-gatekeeper.command << 'SCRIPT'
+          #!/bin/bash
+          echo "Removing quarantine attribute from Termex..."
+          xattr -cr /Applications/Termex.app
+          echo "Done! You can now open Termex normally."
+          SCRIPT
+          chmod +x fix-macos-gatekeeper.command
+          gh release upload "${{ github.ref_name }}" fix-macos-gatekeeper.command --clobber
+
+  # ── Rename assets with OS labels ────────────────────────────
+  rename-assets:
+    name: Rename Assets
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rename release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          ASSETS=$(gh api repos/${{ github.repository }}/releases/tags/$TAG --jq '.assets[] | "\(.id) \(.name)"')
+
+          while IFS= read -r line; do
+            ASSET_ID=$(echo "$line" | awk '{print $1}')
+            OLD_NAME=$(echo "$line" | awk '{$1=""; print $0}' | xargs)
+
+            NEW_NAME="$OLD_NAME"
+
+            # Add OS label if not already present
+            case "$OLD_NAME" in
+              *.dmg|*.dmg.sig)
+                if [[ "$OLD_NAME" == *"aarch64"* ]]; then
+                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.dmg/_mac_aarch64.dmg/')
+                elif [[ "$OLD_NAME" == *"x64"* ]] || [[ "$OLD_NAME" == *"x86_64"* ]]; then
+                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.dmg/_mac_x86_64.dmg/')
+                fi
+                ;;
+              *.msi|*.msi.sig)
+                NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.msi/_win_x64.msi/')
+                ;;
+              *.exe|*.exe.sig)
+                NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.exe/_win_x64.exe/')
+                ;;
+            esac
+
+            if [ "$NEW_NAME" != "$OLD_NAME" ]; then
+              echo "Renaming: $OLD_NAME → $NEW_NAME"
+              gh api --method PATCH repos/${{ github.repository }}/releases/assets/$ASSET_ID \
+                -f name="$NEW_NAME" || true
+            fi
+          done <<< "$ASSETS"

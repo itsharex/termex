@@ -1,0 +1,40 @@
+[package]
+name = "termex"
+version = "0.1.0"
+description = "Open-source AI-native SSH client"
+authors = ["Termex Contributors"]
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "termex_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1", features = ["full"] }
+log = "0.4"
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }
+ring = "0.17"
+argon2 = "0.5"
+russh = "0.46"
+russh-keys = "0.46"
+async-trait = "0.1"
+dirs = "6"
+
+[profile.dev]
+incremental = true
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

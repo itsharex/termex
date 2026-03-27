@@ -72,6 +72,8 @@ src/                     # Vue 3 frontend
 - No `any` type in TypeScript — define proper interfaces
 - No `unwrap()` in Rust production code — use `?` operator or proper error handling
 - No hardcoded strings for user-facing text — prepare for i18n
+- **单文件行数上限 800 行** — 超过时必须按职责拆分为多个文件。Rust 用 `mod` 子模块拆分，Vue 用子组件 + composable 拆分，TypeScript 按领域拆分到独立文件。宁可多文件也不要单文件臃肿
+- **实现与测试必须同步** — 每个功能模块在实现的同时必须编写对应的单元测试/集成测试。Rust 使用 `#[cfg(test)] mod tests` 内联测试，前端使用 Vitest。不允许先实现后补测试，也不允许提交无测试覆盖的功能代码
 
 ## Security Rules (CRITICAL)
 

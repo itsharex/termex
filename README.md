@@ -1,8 +1,16 @@
-# Termex
+<p align="center">
+  <h1 align="center">Termex</h1>
+  <p align="center"><strong>Beautiful. Fast. Intelligent. Free.</strong></p>
+  <p align="center">An open-source, AI-native SSH client built with Rust.</p>
+</p>
 
-**Beautiful. Fast. Intelligent. Free.**
-
-An open-source, AI-native SSH client for developers and ops engineers.
+<p align="center">
+  <a href="#installation">Installation</a> &bull;
+  <a href="#features">Features</a> &bull;
+  <a href="#keyboard-shortcuts">Shortcuts</a> &bull;
+  <a href="#development">Development</a> &bull;
+  <a href="#roadmap">Roadmap</a>
+</p>
 
 ---
 
@@ -10,30 +18,55 @@ An open-source, AI-native SSH client for developers and ops engineers.
 
 |  | Termius | Tabby | WindTerm | Termex |
 |--|---------|-------|----------|--------|
-| Beautiful UI | Yes | Yes | No | Yes |
-| Native Performance | Yes | No (Electron) | Yes | Yes (Tauri/Rust) |
-| AI Integrated | No | No | No | Yes |
-| Free | No | Yes | Yes | Yes |
-| Config Portable | No | Partial | Partial | Yes (Encrypted) |
+| Beautiful UI | Yes | Yes | No | **Yes** |
+| Native Performance | Yes | No (Electron) | Yes | **Yes (Tauri/Rust)** |
+| AI Integrated | No | No | No | **Yes** |
+| Free & Open Source | No | Yes | Yes | **Yes (MIT)** |
+| Encrypted Config | No | Partial | Partial | **Yes (AES-256-GCM)** |
+
+## Installation
+
+### Download
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/user/termex/releases/latest):
+
+| Platform | Architecture | Format |
+|----------|-------------|--------|
+| macOS | Apple Silicon (M1/M2/M3) | `.dmg` |
+| macOS | Intel | `.dmg` |
+| Windows | x64 | `.msi` / `.exe` |
+| Linux | x86_64 | `.deb` / `.rpm` / `.AppImage` |
+| Linux | aarch64 | `.deb` / `.rpm` |
+
+### Build from Source
+
+```bash
+git clone https://github.com/user/termex.git
+cd termex
+pnpm install
+pnpm tauri build
+```
 
 ## Features
 
-### Core (V0.1 MVP)
-- SSH connection management with encrypted credential storage
-- Server grouping with tree view
-- Password & RSA/Ed25519 key authentication
-- Terminal emulator powered by xterm.js (WebGL)
-- Multi-tab sessions
+### Core (V0.1)
+- **SSH Connection Management** -- encrypted credential storage with AES-256-GCM
+- **Server Grouping** -- tree view with color-coded groups, search, hover tooltips
+- **Authentication** -- password & RSA/Ed25519 key with optional passphrase
+- **Terminal Emulator** -- xterm.js with WebGL rendering, 60fps
+- **Multi-Tab Sessions** -- tab switching, status indicators, keyboard navigation
+- **Master Password** -- optional Argon2id-derived encryption key, zero-knowledge
+- **i18n** -- Chinese and English out of the box
 
 ### Productivity (V0.5)
 - SFTP file browser (dual-pane, drag & drop)
 - SSH port forwarding (local / remote / dynamic)
-- Encrypted config export & import (.termex format)
+- Encrypted config export & import (`.termex` format)
 - Theme system (Dark / Light / Custom)
 
 ### AI-Powered (V1.0)
 - Dangerous command detection & blocking
-- AI command explanation (right-click any command)
+- AI command explanation
 - Natural language to shell commands
 - Smart autocomplete based on server context
 - Multi-provider support (Claude / OpenAI / Ollama)
@@ -42,63 +75,35 @@ An open-source, AI-native SSH client for developers and ops engineers.
 ## Tech Stack
 
 ```
-Tauri v2 + Rust          — Backend, SSH, encryption, storage
-Vue 3 + TypeScript       — Frontend framework
-Element Plus             — UI components
-Tailwind CSS             — Styling
-xterm.js                 — Terminal rendering (WebGL)
-SQLCipher                — Encrypted local database
-russh                    — Pure-Rust SSH2 protocol
-ring + Argon2id          — AES-256-GCM encryption & key derivation
+Tauri v2 + Rust          Backend, SSH, encryption, storage
+Vue 3 + TypeScript       Frontend framework
+Element Plus             UI components
+Tailwind CSS             Styling
+xterm.js (WebGL)         Terminal rendering
+SQLCipher                Encrypted local database
+russh                    Pure-Rust SSH2 protocol
+ring + Argon2id          AES-256-GCM encryption & key derivation
 ```
 
 ## Keyboard Shortcuts
 
 All shortcuts use `Cmd` on macOS and `Ctrl` on Windows/Linux.
 
-### General
-
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+N` | New connection |
 | `Ctrl+,` | Open settings |
 | `Ctrl+B` | Toggle sidebar |
-| `Ctrl+I` | Toggle AI panel |
-| `Ctrl+Shift+P` | Command palette |
-| `Escape` | Close modal / menu |
-
-### Tabs
-
-| Shortcut | Action |
-|----------|--------|
+| `Ctrl+W` | Close current tab |
 | `Ctrl+Tab` | Next tab |
 | `Ctrl+Shift+Tab` | Previous tab |
-| `Ctrl+W` | Close current tab |
 | `Ctrl+1` ~ `Ctrl+9` | Go to tab 1-9 |
-
-### Terminal
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Shift+C` | Copy from terminal |
-| `Ctrl+Shift+V` | Paste to terminal |
-| `Ctrl+F` | Search in terminal |
-| `Ctrl+L` | Clear terminal |
-| `Ctrl+Shift+H` | Split terminal horizontally |
-
-### AI
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+E` | Explain selected command |
-| `Ctrl+Enter` | Send AI message (in AI panel) |
 
 ## Security
 
-- All credentials encrypted with **AES-256-GCM**
+- All credentials encrypted with **AES-256-GCM** (ring crate)
 - Master password derived via **Argon2id** (m=64MB, t=3, p=4)
 - Database encrypted with **SQLCipher**
-- Export files independently encrypted with user-set password
 - AI requests **never** include passwords, keys, or tokens
 - No telemetry, no analytics, no phone-home
 
@@ -106,26 +111,22 @@ All shortcuts use `Cmd` on macOS and `Ctrl` on Windows/Linux.
 
 ```
 termex/
-├── CLAUDE.md                   # Claude Code rules
-├── README.md                   # This file
-├── docs/
-│   ├── requirements.md         # Product requirements
-│   ├── detailed-design.md      # Technical design
-│   └── prototype.html          # Interactive UI prototype
-├── src-tauri/                  # Rust backend
-│   └── src/
-│       ├── commands/           # Tauri IPC handlers
-│       ├── ssh/                # SSH session & channel
-│       ├── sftp/               # SFTP operations
-│       ├── crypto/             # Encryption (AES-256-GCM, Argon2id)
-│       ├── storage/            # SQLCipher database
-│       └── ai/                 # AI provider abstraction
-└── src/                        # Vue 3 frontend
-    ├── components/             # UI components
-    ├── composables/            # Composition API hooks
-    ├── stores/                 # Pinia state management
-    ├── types/                  # TypeScript definitions
-    └── utils/                  # Utility functions
+├── .github/workflows/         # CI + cross-platform release
+├── docs/                      # Requirements, design, prototype
+├── scripts/                   # Version bump utilities
+├── src-tauri/src/             # Rust backend
+│   ├── commands/              #   Tauri IPC handlers (crypto, server, ssh)
+│   ├── ssh/                   #   SSH session, auth, channel
+│   ├── crypto/                #   AES-256-GCM, Argon2id KDF
+│   ├── storage/               #   SQLCipher database, migrations, models
+│   └── state.rs               #   Global AppState
+└── src/                       # Vue 3 frontend
+    ├── components/            #   sidebar/, terminal/, settings/
+    ├── composables/           #   useTerminal, useShortcuts
+    ├── stores/                #   serverStore, sessionStore
+    ├── i18n/                  #   zh-CN, en-US
+    ├── types/                 #   TypeScript definitions
+    └── utils/                 #   Tauri IPC wrappers
 ```
 
 ## Development
@@ -133,25 +134,17 @@ termex/
 ### Prerequisites
 
 - [Rust](https://rustup.rs/) (stable)
-- [Node.js](https://nodejs.org/) (20+)
-- [pnpm](https://pnpm.io/) (recommended)
-- Platform-specific Tauri v2 dependencies ([guide](https://v2.tauri.app/start/prerequisites/))
+- [Node.js](https://nodejs.org/) (22+)
+- [pnpm](https://pnpm.io/) (10+)
+- Platform-specific [Tauri v2 dependencies](https://v2.tauri.app/start/prerequisites/)
 
 ### Setup
 
 ```bash
-# Clone
 git clone https://github.com/user/termex.git
 cd termex
-
-# Install frontend dependencies
 pnpm install
-
-# Run in development mode
 pnpm tauri dev
-
-# Build for production
-pnpm tauri build
 ```
 
 ### Commands
@@ -160,24 +153,36 @@ pnpm tauri build
 |---------|-------------|
 | `pnpm tauri dev` | Start dev server with hot reload |
 | `pnpm tauri build` | Build production app |
-| `cargo test` | Run Rust tests |
-| `cargo clippy` | Lint Rust code |
-| `cargo fmt` | Format Rust code |
-| `pnpm run test` | Run frontend tests |
-| `pnpm run lint` | Lint frontend code |
+| `cd src-tauri && cargo test` | Run Rust tests (13 tests) |
+| `cd src-tauri && cargo clippy` | Lint Rust code |
+| `pnpm run build` | Type-check + build frontend |
+| `node scripts/bump-version.mjs patch` | Bump version (patch/minor/major) |
+
+### Release
+
+```bash
+# Bump version across all files
+node scripts/bump-version.mjs 0.2.0
+
+# Commit and tag
+git add -A && git commit -m "chore: release v0.2.0"
+git tag v0.2.0
+git push origin main --tags
+# GitHub Actions will build for all platforms automatically
+```
 
 ## Roadmap
 
-- [x] Product requirements & prototype
+- [x] Product requirements & UI prototype
 - [x] Detailed technical design
-- [ ] V0.1 — MVP (SSH + Terminal + Server Management)
-- [ ] V0.5 — SFTP + Port Forwarding + Config Export
-- [ ] V1.0 — AI Features (Detection, Explanation, NL2Cmd)
-- [ ] V1.5 — Session Recording, Monitoring, Plugins
+- [x] V0.1 -- MVP (SSH + Terminal + Server Management)
+- [ ] V0.5 -- SFTP + Port Forwarding + Config Export
+- [ ] V1.0 -- AI Features (Detection, Explanation, NL2Cmd)
+- [ ] V1.5 -- Session Recording, Monitoring, Plugins
 
 ## Contributing
 
-Contributions are welcome! Please read the contributing guidelines before submitting a PR.
+Contributions are welcome! Please open an issue before submitting large PRs.
 
 ## License
 

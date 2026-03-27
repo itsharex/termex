@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui-cn/nicegui-cn/main/tauri_plugins_schema/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions for Termex main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}
