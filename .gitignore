@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+src-tauri/target/
+
+# Tauri build artifacts
+src-tauri/gen/
+src-tauri/WixTools/
+src-tauri/icons/icon.ico.bak
+
+# IDE
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test & coverage
+coverage/
+*.lcov
+
+# Misc
+*.tgz
+*.bak
+*.tmp

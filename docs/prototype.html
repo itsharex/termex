@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Termex - UI Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50:'#eef2ff', 100:'#e0e7ff', 400:'#818cf8', 500:'#6366f1', 600:'#4f46e5', 700:'#4338ca' },
+            surface: { 0:'#0a0a0f', 1:'#12121a', 2:'#1a1a24', 3:'#22222e', 4:'#2a2a38', 5:'#333344' },
+            txt: { 1:'#f0f0f5', 2:'#a0a0b8', 3:'#6b6b80' },
+            success: '#22c55e',
+            warning: '#f59e0b',
+            danger: '#ef4444',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { height:100%; overflow:hidden; }
+    ::-webkit-scrollbar { width:6px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:#333344; border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:#444456; }
+
+    .sidebar-item { transition: all 0.15s ease; }
+    .sidebar-item:hover { background: rgba(99,102,241,0.08); }
+    .sidebar-item.active { background: rgba(99,102,241,0.15); color: #818cf8; }
+
+    .tab { transition: all 0.15s ease; position: relative; }
+    .tab:hover { background: rgba(255,255,255,0.05); }
+    .tab.active { background: #1a1a24; }
+    .tab.active::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+      height: 2px; background: #6366f1; border-radius: 1px 1px 0 0;
+    }
+    .tab .close-btn { opacity:0; transition: opacity 0.15s; }
+    .tab:hover .close-btn { opacity:1; }
+
+    .terminal-cursor { animation: blink 1s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    .glow-dot { width:8px; height:8px; border-radius:50%; position:relative; }
+    .glow-dot::after {
+      content:''; position:absolute; inset:-2px; border-radius:50%;
+      background:inherit; opacity:0.3; filter:blur(3px);
+    }
+    .glow-dot.online { background:#22c55e; }
+    .glow-dot.offline { background:#6b6b80; }
+
+    .modal-overlay {
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+      transition: opacity 0.2s ease;
+    }
+    .modal-content {
+      animation: modalIn 0.2s ease-out;
+    }
+    @keyframes modalIn {
+      from { opacity:0; transform:translateY(-10px) scale(0.98); }
+      to { opacity:1; transform:translateY(0) scale(1); }
+    }
+
+    .context-menu {
+      animation: ctxIn 0.12s ease-out;
+    }
+    @keyframes ctxIn {
+      from { opacity:0; transform:scale(0.95); }
+      to { opacity:1; transform:scale(1); }
+    }
+
+    .ai-msg { animation: msgIn 0.3s ease-out; }
+    @keyframes msgIn {
+      from { opacity:0; transform:translateY(8px); }
+      to { opacity:1; transform:translateY(0); }
+    }
+
+    .tooltip-hover { display:none; }
+
+    #global-tooltip {
+      position: fixed;
+      z-index: 9999;
+      background: #22222e;
+      color: #e0e0f0;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 5px 12px;
+      border-radius: 8px;
+      white-space: nowrap;
+      pointer-events: none;
+      border: 1px solid rgba(99,102,241,0.25);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    #global-tooltip.visible { opacity: 1; }
+
+    .split-handle {
+      cursor: col-resize; transition: background 0.15s;
+    }
+    .split-handle:hover { background: rgba(99,102,241,0.3); }
+
+    .sftp-row { transition: background 0.1s; }
+    .sftp-row:hover { background: rgba(255,255,255,0.03); }
+
+    input, select, textarea {
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: #6366f1 !important;
+      box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      transition: all 0.15s;
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #818cf8, #6366f1);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+    }
+
+    .toggle-track {
+      width:36px; height:20px; border-radius:10px; background:#333344;
+      transition: background 0.2s; cursor:pointer; position:relative;
+    }
+    .toggle-track.on { background:#6366f1; }
+    .toggle-knob {
+      width:16px; height:16px; border-radius:50%; background:white;
+      position:absolute; top:2px; left:2px; transition: transform 0.2s;
+    }
+    .toggle-track.on .toggle-knob { transform:translateX(16px); }
+  </style>
+</head>
+
+<body class="bg-surface-0 text-txt-1 font-sans h-screen flex flex-col select-none">
+
+  <!-- Global Tooltip (positioned via JS, outside overflow:hidden containers) -->
+  <div id="global-tooltip"></div>
+
+  <!-- ===== Title Bar ===== -->
+  <div class="h-10 bg-surface-1 flex items-center px-4 border-b border-surface-4/50 shrink-0" style="-webkit-app-region:drag">
+    <div class="flex-1 text-center">
+      <span class="text-sm font-semibold text-txt-2 tracking-wide">
+        <i class="fa-solid fa-terminal text-brand-400 mr-1.5 text-xs"></i>Termex
+      </span>
+    </div>
+  </div>
+
+  <!-- ===== Main Layout ===== -->
+  <div class="flex-1 flex overflow-hidden">
+
+    <!-- ===== Left Sidebar ===== -->
+    <div id="sidebar" class="bg-surface-1 border-r border-surface-4/50 flex flex-col shrink-0 transition-all duration-300 ease-in-out overflow-hidden" style="width:240px">
+
+      <!-- Sidebar Header -->
+      <div class="px-3 pt-3 pb-2 border-b border-surface-4/30">
+        <div class="flex items-center justify-between">
+          <!-- Dropdown Menu -->
+          <div class="relative">
+            <button onclick="toggleSidebarMenu()" class="flex items-center gap-1.5 text-sm text-brand-400 hover:bg-brand-500/10 px-2 py-1 rounded-lg transition-colors" id="sidebar-menu-btn">
+              <i class="fa-solid fa-plus text-xs"></i>
+              <span>New</span>
+              <i class="fa-solid fa-chevron-down text-[9px] ml-0.5 opacity-60"></i>
+            </button>
+            <div id="sidebar-menu" class="hidden context-menu absolute left-0 top-full mt-1 z-50 bg-surface-2 border border-surface-4/50 rounded-xl shadow-2xl py-1.5 min-w-[180px]">
+              <button onclick="toggleConnectModal();toggleSidebarMenu()" class="w-full text-left px-3 py-1.5 text-sm text-txt-1 hover:bg-brand-500/10 flex items-center gap-2.5 transition-colors">
+                <i class="fa-solid fa-bolt text-xs w-4 text-center text-yellow-400"></i> Quick Connect
+              </button>
+              <button onclick="toggleConnectModal();toggleSidebarMenu()" class="w-full text-left px-3 py-1.5 text-sm text-txt-1 hover:bg-brand-500/10 flex items-center gap-2.5 transition-colors">
+                <i class="fa-solid fa-plus text-xs w-4 text-center text-brand-400"></i> New Host
+              </button>
+              <div class="h-px bg-surface-4/30 my-1"></div>
+              <button onclick="toggleSidebarMenu()" class="w-full text-left px-3 py-1.5 text-sm text-txt-1 hover:bg-brand-500/10 flex items-center gap-2.5 transition-colors">
+                <i class="fa-solid fa-folder-plus text-xs w-4 text-center text-txt-3"></i> New Group
+              </button>
+              <div class="h-px bg-surface-4/30 my-1"></div>
+              <button onclick="toggleSidebarMenu()" class="w-full text-left px-3 py-1.5 text-sm text-txt-1 hover:bg-brand-500/10 flex items-center gap-2.5 transition-colors">
+                <i class="fa-solid fa-file-import text-xs w-4 text-center text-txt-3"></i> Import Config
+              </button>
+              <button onclick="toggleSidebarMenu()" class="w-full text-left px-3 py-1.5 text-sm text-txt-1 hover:bg-brand-500/10 flex items-center gap-2.5 transition-colors">
+                <i class="fa-solid fa-file-export text-xs w-4 text-center text-txt-3"></i> Export Config
+              </button>
+            </div>
+          </div>
+          <!-- Search icon -->
+          <button onclick="toggleSidebarSearch()" class="text-txt-3 hover:text-txt-1 transition-colors text-sm px-1.5 py-1 rounded hover:bg-surface-3/50" title="Search (Ctrl+F)" id="sidebar-search-btn">
+            <i class="fa-solid fa-magnifying-glass text-xs"></i>
+          </button>
+        </div>
+        <!-- Search input (hidden by default) -->
+        <div id="sidebar-search-box" class="hidden mt-2">
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-txt-3 text-xs"></i>
+            <input type="text" id="sidebar-search-input" placeholder="Search servers..."
+              class="w-full bg-surface-3 text-sm text-txt-1 placeholder-txt-3 pl-8 pr-8 py-1.5 rounded-lg border border-surface-5/50"
+              onkeydown="if(event.key==='Escape'){toggleSidebarSearch()}">
+            <button onclick="toggleSidebarSearch()" class="absolute right-2 top-1/2 -translate-y-1/2 text-txt-3 hover:text-txt-1 text-xs">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Server List -->
+      <div class="flex-1 overflow-y-auto py-2 px-2">
+
+        <!-- Group: Production -->
+        <div class="mb-1">
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-txt-2 hover:text-txt-1 transition-colors group" onclick="toggleGroup(this)">
+            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200 group-folder-icon"></i>
+            <i class="fa-solid fa-folder text-yellow-500/80 text-xs"></i>
+            <span class="text-xs font-medium uppercase tracking-wider flex-1">Production</span>
+            <span class="text-[10px] text-txt-3">3</span>
+          </div>
+          <div class="ml-2 group-children">
+            <div class="sidebar-item active flex items-center gap-2.5 px-3 py-1.5 rounded-md cursor-pointer text-sm relative group/tip" oncontextmenu="showContextMenu(event, 'web-prod-01')">
+              <div class="glow-dot online shrink-0"></div>
+              <span class="truncate flex-1">web-prod-01</span>
+              <div class="tooltip-hover">192.168.1.10:22</div>
+            </div>
+            <div class="sidebar-item flex items-center gap-2.5 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2 relative group/tip" oncontextmenu="showContextMenu(event, 'api-prod-01')">
+              <div class="glow-dot online shrink-0"></div>
+              <span class="truncate flex-1">api-prod-01</span>
+              <div class="tooltip-hover">10.0.1.20:22</div>
+            </div>
+            <div class="sidebar-item flex items-center gap-2.5 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2 relative group/tip" oncontextmenu="showContextMenu(event, 'db-prod-01')">
+              <div class="glow-dot offline shrink-0"></div>
+              <span class="truncate flex-1">db-prod-01</span>
+              <div class="tooltip-hover">10.0.1.30:3306</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Group: Staging -->
+        <div class="mb-1">
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-txt-2 hover:text-txt-1 transition-colors group" onclick="toggleGroup(this)">
+            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200 group-folder-icon"></i>
+            <i class="fa-solid fa-folder text-blue-400/80 text-xs"></i>
+            <span class="text-xs font-medium uppercase tracking-wider flex-1">Staging</span>
+            <span class="text-[10px] text-txt-3">2</span>
+          </div>
+          <div class="ml-2 group-children">
+            <div class="sidebar-item flex items-center gap-2.5 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2 relative group/tip" oncontextmenu="showContextMenu(event, 'web-staging')">
+              <div class="glow-dot online shrink-0"></div>
+              <span class="truncate flex-1">web-staging</span>
+              <div class="tooltip-hover">172.16.0.10:22</div>
+            </div>
+            <div class="sidebar-item flex items-center gap-2.5 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2 relative group/tip" oncontextmenu="showContextMenu(event, 'api-staging')">
+              <div class="glow-dot offline shrink-0"></div>
+              <span class="truncate flex-1">api-staging</span>
+              <div class="tooltip-hover">172.16.0.11:22</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Group: Development -->
+        <div class="mb-1">
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-txt-2 hover:text-txt-1 transition-colors group" onclick="toggleGroup(this)">
+            <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200 group-folder-icon"></i>
+            <i class="fa-solid fa-folder text-green-400/80 text-xs"></i>
+            <span class="text-xs font-medium uppercase tracking-wider flex-1">Development</span>
+            <span class="text-[10px] text-txt-3">2</span>
+          </div>
+          <div class="ml-2 group-children">
+            <div class="sidebar-item flex items-center gap-2.5 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2 relative group/tip">
+              <div class="glow-dot online shrink-0"></div>
+              <span class="truncate flex-1">dev-local</span>
+              <div class="tooltip-hover">127.0.0.1:2222</div>
+            </div>
+            <div class="sidebar-item flex items-center gap-2.5 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2 relative group/tip">
+              <div class="glow-dot offline shrink-0"></div>
+              <span class="truncate flex-1">raspberry-pi</span>
+              <div class="tooltip-hover">192.168.1.50:22</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ===== Split Handle (Sidebar) ===== -->
+    <div id="sidebar-split-handle" class="split-handle w-[3px] bg-transparent hover:bg-brand-500/30 shrink-0"></div>
+
+    <!-- ===== Center Area ===== -->
+    <div class="flex-1 flex flex-col min-w-0">
+
+      <!-- Tab Bar -->
+      <div class="h-9 bg-surface-2 flex items-end border-b border-surface-4/50 shrink-0">
+        <div class="flex items-end h-full overflow-x-auto">
+          <div class="tab active flex items-center gap-2 px-4 h-full text-sm cursor-pointer rounded-t-lg" onclick="switchTab(this)">
+            <div class="w-2 h-2 rounded-full bg-success"></div>
+            <span class="truncate max-w-[120px]">web-prod-01</span>
+            <button class="close-btn text-txt-3 hover:text-danger text-xs ml-1" onclick="event.stopPropagation()">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="tab flex items-center gap-2 px-4 h-full text-sm text-txt-2 cursor-pointer rounded-t-lg" onclick="switchTab(this)">
+            <div class="w-2 h-2 rounded-full bg-success"></div>
+            <span class="truncate max-w-[120px]">api-prod-01</span>
+            <button class="close-btn text-txt-3 hover:text-danger text-xs ml-1" onclick="event.stopPropagation()">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="tab flex items-center gap-2 px-4 h-full text-sm text-txt-2 cursor-pointer rounded-t-lg" onclick="switchTab(this)">
+            <i class="fa-solid fa-folder text-yellow-500/60 text-xs"></i>
+            <span class="truncate max-w-[120px]">SFTP: web-prod-01</span>
+            <button class="close-btn text-txt-3 hover:text-danger text-xs ml-1" onclick="event.stopPropagation()">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <button class="px-3 h-full text-txt-3 hover:text-txt-1 transition-colors text-xs" title="New Tab">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
+        <div class="ml-auto flex items-center gap-1 px-2 h-full">
+          <button onclick="toggleSftp()" class="px-2 py-1 text-xs text-txt-3 hover:text-txt-1 transition-colors rounded" title="Toggle SFTP">
+            <i class="fa-solid fa-folder-open"></i>
+          </button>
+          <button onclick="toggleAiPanel()" class="px-2 py-1 text-sm transition-colors rounded hover:scale-110" title="AI Assistant (Ctrl+I)">✨</button>
+          <button class="px-2 py-1 text-xs text-txt-3 hover:text-txt-1 transition-colors rounded" title="Split Terminal">
+            <i class="fa-solid fa-table-columns"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Terminal + Panels -->
+      <div class="flex-1 flex overflow-hidden">
+
+        <!-- Terminal Area -->
+        <div class="flex-1 flex flex-col min-w-0">
+          <!-- Terminal -->
+          <div id="terminal-area" class="flex-1 bg-surface-0 p-4 overflow-y-auto font-mono text-sm leading-relaxed">
+            <div class="text-txt-3 mb-1">Last login: Thu Mar 27 10:23:45 2026 from 192.168.1.100</div>
+            <div class="text-txt-3 mb-3">Welcome to Ubuntu 22.04.4 LTS (GNU/Linux 5.15.0-97-generic x86_64)</div>
+            <div class="mb-1">
+              <span class="text-green-400 font-medium">root@web-prod-01</span><span class="text-txt-2">:</span><span class="text-blue-400">~</span><span class="text-txt-2">$ </span>
+              <span class="text-txt-1">systemctl status nginx</span>
+            </div>
+            <div class="text-txt-2 mb-1">
+              <span class="text-green-400">●</span> nginx.service - A high performance web server
+            </div>
+            <div class="text-txt-2 pl-5 mb-0.5">Loaded: loaded (/lib/systemd/system/nginx.service; enabled)</div>
+            <div class="text-txt-2 pl-5 mb-0.5">Active: <span class="text-green-400">active (running)</span> since Thu 2026-03-27 08:00:12 UTC; 2h ago</div>
+            <div class="text-txt-2 pl-5 mb-0.5">Main PID: 1234 (nginx)</div>
+            <div class="text-txt-2 pl-5 mb-3">Tasks: 5 (limit: 4915)</div>
+            <div class="mb-1">
+              <span class="text-green-400 font-medium">root@web-prod-01</span><span class="text-txt-2">:</span><span class="text-blue-400">~</span><span class="text-txt-2">$ </span>
+              <span class="text-txt-1">df -h</span>
+            </div>
+            <div class="text-txt-2 mb-0.5">Filesystem      Size  Used Avail Use% Mounted on</div>
+            <div class="text-txt-2 mb-0.5">/dev/sda1        50G   23G   25G  48% /</div>
+            <div class="text-txt-2 mb-0.5">tmpfs           2.0G     0  2.0G   0% /dev/shm</div>
+            <div class="text-txt-2 mb-3">/dev/sdb1       200G  156G   35G  82% /data</div>
+            <div class="mb-1">
+              <span class="text-green-400 font-medium">root@web-prod-01</span><span class="text-txt-2">:</span><span class="text-blue-400">~</span><span class="text-txt-2">$ </span>
+              <span class="text-txt-1">docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"</span>
+            </div>
+            <div class="text-txt-2 mb-0.5">NAMES            STATUS          PORTS</div>
+            <div class="text-txt-2 mb-0.5">nginx-proxy      Up 2 hours      0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp</div>
+            <div class="text-txt-2 mb-0.5">app-backend      Up 2 hours      0.0.0.0:8080->8080/tcp</div>
+            <div class="text-txt-2 mb-0.5">redis            Up 2 hours      6379/tcp</div>
+            <div class="text-txt-2 mb-3">postgres         Up 2 hours      5432/tcp</div>
+            <div>
+              <span class="text-green-400 font-medium">root@web-prod-01</span><span class="text-txt-2">:</span><span class="text-blue-400">~</span><span class="text-txt-2">$ </span>
+              <span class="terminal-cursor text-txt-1 bg-txt-1/80 px-[1px]">&nbsp;</span>
+            </div>
+          </div>
+
+          <!-- SFTP Panel (toggleable) -->
+          <div id="sftp-panel" class="hidden border-t border-surface-4/50" style="height:240px">
+            <div class="h-8 bg-surface-2 flex items-center px-3 border-b border-surface-4/30">
+              <span class="text-xs font-medium text-txt-2"><i class="fa-solid fa-folder-open text-yellow-500/70 mr-1.5"></i>SFTP - web-prod-01</span>
+              <div class="ml-auto flex items-center gap-2">
+                <button class="text-xs text-txt-3 hover:text-txt-1"><i class="fa-solid fa-upload"></i></button>
+                <button class="text-xs text-txt-3 hover:text-txt-1"><i class="fa-solid fa-download"></i></button>
+                <button class="text-xs text-txt-3 hover:text-txt-1"><i class="fa-solid fa-sync"></i></button>
+                <button onclick="toggleSftp()" class="text-xs text-txt-3 hover:text-danger"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+            </div>
+            <div class="flex h-[calc(100%-32px)]">
+              <!-- Local -->
+              <div class="flex-1 border-r border-surface-4/30 overflow-y-auto">
+                <div class="px-3 py-1.5 bg-surface-2/50 text-[11px] text-txt-3 border-b border-surface-4/20 flex items-center gap-1.5">
+                  <i class="fa-solid fa-laptop text-[10px]"></i>
+                  <span class="truncate">/Users/liuyidao/Documents</span>
+                </div>
+                <div class="text-xs">
+                  <div class="sftp-row flex items-center gap-2 px-3 py-1.5 cursor-pointer">
+                    <i class="fa-solid fa-folder text-yellow-500/70 text-[11px] w-4"></i>
+                    <span class="flex-1 truncate">projects</span>
+                    <span class="text-txt-3 text-[10px]">--</span>
+                  </div>
+                  <div class="sftp-row flex items-center gap-2 px-3 py-1.5 cursor-pointer">
+                    <i class="fa-solid fa-folder text-yellow-500/70 text-[11px] w-4"></i>
+                    <span class="flex-1 truncate">downloads</span>
+                    <span class="text-txt-3 text-[10px]">--</span>
+                  </div>
+                  <div class="sftp-row flex items-center gap-2 px-3 py-1.5 cursor-pointer">
+                    <i class="fa-regular fa-file text-txt-3 text-[11px] w-4"></i>
+                    <span class="flex-1 truncate">deploy.sh</span>
+                    <span class="text-txt-3 text-[10px]">2.1 KB</span>
+                  </div>
+                  <div class="sftp-row flex items-center gap-2 px-3 py-1.5 cursor-pointer">
+                    <i class="fa-regular fa-file text-txt-3 text-[11px] w-4"></i>
+                    <span class="flex-1 truncate">config.yml</span>
+                    <span class="text-txt-3 text-[10px]">856 B</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Transfer Arrows -->
+              <div class="w-10 flex flex-col items-center justify-center gap-2 bg-surface-2/30">
+                <button class="text-txt-3 hover:text-brand-400 transition-colors" title="Upload"><i class="fa-solid fa-arrow-right text-xs"></i></button>
+                <button class="text-txt-3 hover:text-brand-400 transition-colors" title="Download"><i class="fa-solid fa-arrow-left text-xs"></i></button>
+              </div>
+              <!-- Remote -->
+              <div class="flex-1 overflow-y-auto">
+                <div class="px-3 py-1.5 bg-surface-2/50 text-[11px] text-txt-3 border-b border-surface-4/20 flex items-center gap-1.5">
+                  <i class="fa-solid fa-server text-[10px]"></i>
+                  <span class="truncate">/var/www/html</span>
+                </div>
+                <div class="text-xs">
+                  <div class="sftp-row flex items-center gap-2 px-3 py-1.5 cursor-pointer">
+                    <i class="fa-solid fa-folder text-yellow-500/70 text-[11px] w-4"></i>
+                    <span class="flex-1 truncate">assets</span>
+                    <span class="text-txt-3 text-[10px]">--</span>
+                  </div>
+                  <div class="sftp-row flex items-center gap-2 px-3 py-1.5 cursor-pointer">
+                    <i class="fa-solid fa-folder text-yellow-500/70 text-[11px] w-4"></i>
+                    <span class="flex-1 truncate">dist</span>
+                    <span class="text-txt-3 text-[10px]">--</span>
+                  </div>
+                  <div class="sftp-row flex items-center gap-2 px-3 py-1.5 cursor-pointer">
+                    <i class="fa-regular fa-file-code text-blue-400/60 text-[11px] w-4"></i>
+                    <span class="flex-1 truncate">index.html</span>
+                    <span class="text-txt-3 text-[10px]">4.2 KB</span>
+                  </div>
+                  <div class="sftp-row flex items-center gap-2 px-3 py-1.5 cursor-pointer">
+                    <i class="fa-regular fa-file text-txt-3 text-[11px] w-4"></i>
+                    <span class="flex-1 truncate">nginx.conf</span>
+                    <span class="text-txt-3 text-[10px]">1.8 KB</span>
+                  </div>
+                  <div class="sftp-row flex items-center gap-2 px-3 py-1.5 cursor-pointer">
+                    <i class="fa-regular fa-file text-txt-3 text-[11px] w-4"></i>
+                    <span class="flex-1 truncate">.env</span>
+                    <span class="text-txt-3 text-[10px]">312 B</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== AI Panel (toggleable) ===== -->
+        <div id="ai-panel" class="hidden w-80 bg-surface-1 border-l border-surface-4/50 flex flex-col shrink-0">
+          <div class="h-10 flex items-center px-4 border-b border-surface-4/30">
+            <i class="fa-solid fa-wand-magic-sparkles text-brand-400 text-sm mr-2"></i>
+            <span class="text-sm font-medium">AI Assistant</span>
+            <div class="ml-auto flex items-center gap-2">
+              <select class="bg-surface-3 text-[11px] text-txt-2 px-2 py-0.5 rounded border border-surface-5/50">
+                <option>Claude</option>
+                <option>GPT-4</option>
+                <option>Ollama</option>
+              </select>
+              <button onclick="toggleAiPanel()" class="text-txt-3 hover:text-danger text-xs"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <!-- AI Messages -->
+          <div class="flex-1 overflow-y-auto p-4 space-y-4">
+            <!-- Welcome -->
+            <div class="ai-msg bg-surface-2 rounded-xl p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <div class="w-6 h-6 rounded-lg bg-brand-500/20 flex items-center justify-center">
+                  <i class="fa-solid fa-robot text-brand-400 text-xs"></i>
+                </div>
+                <span class="text-xs font-medium text-brand-400">Termex AI</span>
+              </div>
+              <p class="text-xs text-txt-2 leading-relaxed">
+                Hi! I'm connected to <span class="text-brand-400 font-medium">web-prod-01</span> (Ubuntu 22.04). I can help you with:
+              </p>
+              <div class="mt-2 space-y-1">
+                <div class="text-xs text-txt-3 flex items-center gap-1.5"><i class="fa-solid fa-shield-halved text-success text-[10px]"></i> Dangerous command detection</div>
+                <div class="text-xs text-txt-3 flex items-center gap-1.5"><i class="fa-solid fa-language text-blue-400 text-[10px]"></i> Natural language to commands</div>
+                <div class="text-xs text-txt-3 flex items-center gap-1.5"><i class="fa-solid fa-circle-info text-yellow-400 text-[10px]"></i> Command explanation</div>
+              </div>
+            </div>
+
+            <!-- User message -->
+            <div class="ai-msg flex justify-end">
+              <div class="bg-brand-500/20 rounded-xl p-3 max-w-[90%]">
+                <p class="text-xs text-txt-1">Show me the top 5 processes by memory usage</p>
+              </div>
+            </div>
+
+            <!-- AI response -->
+            <div class="ai-msg bg-surface-2 rounded-xl p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <div class="w-6 h-6 rounded-lg bg-brand-500/20 flex items-center justify-center">
+                  <i class="fa-solid fa-robot text-brand-400 text-xs"></i>
+                </div>
+                <span class="text-xs font-medium text-brand-400">Termex AI</span>
+              </div>
+              <p class="text-xs text-txt-2 mb-2">Here's the command to show top 5 processes by memory:</p>
+              <div class="bg-surface-0 rounded-lg p-2.5 font-mono text-xs text-green-400 flex items-center justify-between group">
+                <code>ps aux --sort=-%mem | head -6</code>
+                <button class="text-txt-3 hover:text-txt-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Copy & Run">
+                  <i class="fa-solid fa-play text-[10px]"></i>
+                </button>
+              </div>
+              <p class="text-[11px] text-txt-3 mt-2"><i class="fa-solid fa-circle-info text-[9px] mr-1"></i> <code class="text-txt-2">head -6</code> includes the header row, so you'll see 5 processes + column names.</p>
+            </div>
+
+            <!-- Danger warning -->
+            <div class="ai-msg bg-danger/10 border border-danger/20 rounded-xl p-3">
+              <div class="flex items-center gap-2 mb-2">
+                <div class="w-6 h-6 rounded-lg bg-danger/20 flex items-center justify-center">
+                  <i class="fa-solid fa-triangle-exclamation text-danger text-xs"></i>
+                </div>
+                <span class="text-xs font-medium text-danger">Danger Detected</span>
+              </div>
+              <p class="text-xs text-txt-2 mb-2">The command <code class="bg-surface-0 px-1.5 py-0.5 rounded text-danger">rm -rf /var/log/*</code> will permanently delete all log files. This action cannot be undone.</p>
+              <div class="flex gap-2 mt-2">
+                <button class="px-3 py-1 bg-surface-3 text-xs text-txt-2 rounded-lg hover:bg-surface-4 transition-colors">Cancel</button>
+                <button class="px-3 py-1 bg-danger/20 text-xs text-danger rounded-lg hover:bg-danger/30 transition-colors">Execute Anyway</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI Input -->
+          <div class="p-3 border-t border-surface-4/30">
+            <div class="relative">
+              <textarea rows="2" placeholder="Ask AI anything... (e.g., 'find large files over 1GB')"
+                class="w-full bg-surface-3 text-xs text-txt-1 placeholder-txt-3 px-3 py-2 pr-8 rounded-xl border border-surface-5/50 resize-none"></textarea>
+              <button class="absolute right-2 bottom-2 text-brand-400 hover:text-brand-500 transition-colors">
+                <i class="fa-solid fa-paper-plane text-xs"></i>
+              </button>
+            </div>
+            <div class="flex items-center justify-between mt-1.5">
+              <span class="text-[10px] text-txt-3"><kbd class="bg-surface-3 px-1 py-0.5 rounded text-[9px]">Ctrl</kbd> + <kbd class="bg-surface-3 px-1 py-0.5 rounded text-[9px]">Enter</kbd> to send</span>
+              <span class="text-[10px] text-txt-3">Claude 3.5 Sonnet</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Status Bar -->
+      <div class="h-6 bg-surface-2 border-t border-surface-4/50 flex items-center px-3 text-[11px] text-txt-3 shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="flex items-center gap-1.5">
+            <div class="w-1.5 h-1.5 rounded-full bg-success"></div>
+            Connected
+          </span>
+          <span class="text-txt-3/50">|</span>
+          <span>root@web-prod-01</span>
+          <span class="text-txt-3/50">|</span>
+          <span>192.168.1.10:22</span>
+          <span class="text-txt-3/50">|</span>
+          <span>SSH-2.0 &middot; AES-256-GCM</span>
+        </div>
+        <div class="ml-auto flex items-center gap-3">
+          <span><i class="fa-solid fa-arrow-up text-[9px] text-success mr-1"></i>1.2 KB/s</span>
+          <span><i class="fa-solid fa-arrow-down text-[9px] text-blue-400 mr-1"></i>3.5 KB/s</span>
+          <span>UTF-8</span>
+          <span>Latency: 12ms</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== Connect Modal ===== -->
+  <div id="connect-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+    <div class="modal-content bg-surface-2 rounded-2xl shadow-2xl border border-surface-4/50 w-[520px] max-h-[80vh] overflow-y-auto">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-surface-4/30">
+        <h2 class="text-base font-semibold flex items-center gap-2">
+          <i class="fa-solid fa-server text-brand-400"></i>
+          New Connection
+        </h2>
+        <button onclick="toggleConnectModal()" class="text-txt-3 hover:text-txt-1 transition-colors">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <!-- Body -->
+      <div class="px-6 py-5 space-y-4">
+        <!-- Name & Group -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-txt-2 mb-1.5 block font-medium">Name</label>
+            <input type="text" placeholder="my-server" value="web-prod-01"
+              class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+          </div>
+          <div>
+            <label class="text-xs text-txt-2 mb-1.5 block font-medium">Group</label>
+            <select class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+              <option>Production</option>
+              <option>Staging</option>
+              <option>Development</option>
+              <option value="new">+ New Group</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Host & Port -->
+        <div class="grid grid-cols-3 gap-3">
+          <div class="col-span-2">
+            <label class="text-xs text-txt-2 mb-1.5 block font-medium">Host</label>
+            <input type="text" placeholder="192.168.1.10 or hostname"
+              class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+          </div>
+          <div>
+            <label class="text-xs text-txt-2 mb-1.5 block font-medium">Port</label>
+            <input type="number" value="22"
+              class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+          </div>
+        </div>
+
+        <!-- Username -->
+        <div>
+          <label class="text-xs text-txt-2 mb-1.5 block font-medium">Username</label>
+          <input type="text" placeholder="root"
+            class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+        </div>
+
+        <!-- Auth Method -->
+        <div>
+          <label class="text-xs text-txt-2 mb-1.5 block font-medium">Authentication</label>
+          <div class="flex gap-2 mb-3">
+            <button id="auth-password-btn" class="flex-1 py-2 text-xs rounded-lg border transition-colors bg-brand-500/10 border-brand-500/30 text-brand-400" onclick="switchAuth('password')">
+              <i class="fa-solid fa-key mr-1.5"></i>Password
+            </button>
+            <button id="auth-key-btn" class="flex-1 py-2 text-xs rounded-lg border transition-colors bg-surface-3 border-surface-5/50 text-txt-2" onclick="switchAuth('key')">
+              <i class="fa-solid fa-file-shield mr-1.5"></i>SSH Key
+            </button>
+          </div>
+          <!-- Password input -->
+          <div id="auth-password" class="">
+            <input type="password" placeholder="Enter password"
+              class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+            <div class="flex items-center gap-2 mt-2">
+              <div class="toggle-track on" onclick="this.classList.toggle('on')">
+                <div class="toggle-knob"></div>
+              </div>
+              <span class="text-xs text-txt-3">Save password (encrypted)</span>
+            </div>
+          </div>
+          <!-- Key input -->
+          <div id="auth-key" class="hidden space-y-3">
+            <div class="flex gap-2">
+              <input type="text" placeholder="/Users/liuyidao/.ssh/id_rsa" readonly
+                class="flex-1 bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+              <button class="px-4 py-2 bg-surface-3 text-sm text-txt-2 rounded-lg border border-surface-5/50 hover:bg-surface-4 transition-colors">
+                Browse
+              </button>
+            </div>
+            <input type="password" placeholder="Key passphrase (optional)"
+              class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+          </div>
+        </div>
+
+        <!-- Port Forwarding (collapsible) -->
+        <div>
+          <button class="flex items-center gap-2 text-xs text-txt-3 hover:text-txt-2 transition-colors" onclick="togglePortForward()">
+            <i id="pf-icon" class="fa-solid fa-chevron-right text-[10px] transition-transform"></i>
+            <i class="fa-solid fa-network-wired text-[10px]"></i>
+            Port Forwarding
+          </button>
+          <div id="port-forward-section" class="hidden mt-3 space-y-2 pl-4 border-l-2 border-surface-4">
+            <div class="grid grid-cols-4 gap-2 items-end">
+              <div>
+                <label class="text-[10px] text-txt-3 mb-1 block">Type</label>
+                <select class="w-full bg-surface-3 text-xs text-txt-1 px-2 py-1.5 rounded border border-surface-5/50">
+                  <option>Local</option>
+                  <option>Remote</option>
+                  <option>Dynamic</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[10px] text-txt-3 mb-1 block">Local Port</label>
+                <input type="number" placeholder="8080" class="w-full bg-surface-3 text-xs text-txt-1 px-2 py-1.5 rounded border border-surface-5/50">
+              </div>
+              <div>
+                <label class="text-[10px] text-txt-3 mb-1 block">Remote Host:Port</label>
+                <input type="text" placeholder="localhost:3306" class="w-full bg-surface-3 text-xs text-txt-1 px-2 py-1.5 rounded border border-surface-5/50">
+              </div>
+              <button class="px-2 py-1.5 bg-brand-500/10 text-xs text-brand-400 rounded border border-brand-500/20 hover:bg-brand-500/20 transition-colors">
+                <i class="fa-solid fa-plus"></i> Add
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Footer -->
+      <div class="flex items-center justify-between px-6 py-4 border-t border-surface-4/30">
+        <button class="text-xs text-txt-3 hover:text-txt-1 transition-colors">
+          <i class="fa-solid fa-flask mr-1"></i>Test Connection
+        </button>
+        <div class="flex gap-2">
+          <button onclick="toggleConnectModal()" class="px-4 py-2 text-sm text-txt-2 rounded-lg hover:bg-surface-3 transition-colors">
+            Cancel
+          </button>
+          <button class="btn-primary px-6 py-2 text-sm text-white rounded-lg font-medium">
+            Connect
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Settings Modal ===== -->
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+    <div class="modal-content bg-surface-2 rounded-2xl shadow-2xl border border-surface-4/50 w-[680px] h-[520px] flex overflow-hidden">
+      <!-- Settings Sidebar -->
+      <div class="w-44 bg-surface-1 border-r border-surface-4/30 py-3 shrink-0">
+        <div class="px-4 mb-3">
+          <h2 class="text-sm font-semibold">Settings</h2>
+        </div>
+        <div class="space-y-0.5 px-2" id="settings-nav">
+          <div class="sidebar-item active flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-sm" onclick="switchSettingsTab('appearance', this)">
+            <i class="fa-solid fa-palette text-xs w-4 text-center"></i> Appearance
+          </div>
+          <div class="sidebar-item flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2" onclick="switchSettingsTab('terminal', this)">
+            <i class="fa-solid fa-terminal text-xs w-4 text-center"></i> Terminal
+          </div>
+          <div class="sidebar-item flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2" onclick="switchSettingsTab('keybindings', this)">
+            <i class="fa-solid fa-keyboard text-xs w-4 text-center"></i> Keybindings
+          </div>
+          <div class="sidebar-item flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2" onclick="switchSettingsTab('security', this)">
+            <i class="fa-solid fa-shield-halved text-xs w-4 text-center"></i> Security
+          </div>
+          <div class="sidebar-item flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2" onclick="switchSettingsTab('ai', this)">
+            <i class="fa-solid fa-wand-magic-sparkles text-xs w-4 text-center"></i> AI Config
+          </div>
+          <div class="sidebar-item flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2" onclick="switchSettingsTab('backup', this)">
+            <i class="fa-solid fa-database text-xs w-4 text-center"></i> Backup
+          </div>
+          <div class="sidebar-item flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer text-sm text-txt-2" onclick="switchSettingsTab('about', this)">
+            <i class="fa-solid fa-circle-info text-xs w-4 text-center"></i> About
+          </div>
+        </div>
+      </div>
+      <!-- Settings Content -->
+      <div class="flex-1 flex flex-col min-w-0">
+        <div class="flex items-center justify-between px-6 py-3 border-b border-surface-4/30">
+          <h3 id="settings-title" class="text-sm font-medium">Appearance</h3>
+          <button onclick="toggleSettings()" class="text-txt-3 hover:text-txt-1"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- ====== Tab: Appearance ====== -->
+        <div id="settings-appearance" class="settings-panel flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          <div>
+            <label class="text-xs text-txt-2 font-medium mb-2 block">Theme</label>
+            <div class="flex gap-3">
+              <div class="w-20 h-14 rounded-xl bg-surface-0 border-2 border-brand-500 flex flex-col items-center justify-center cursor-pointer">
+                <div class="w-10 h-1.5 bg-surface-4 rounded mb-1"></div>
+                <div class="w-8 h-1 bg-surface-3 rounded mb-0.5"></div>
+                <div class="w-6 h-1 bg-surface-3 rounded"></div>
+                <span class="text-[9px] text-brand-400 mt-1">Dark</span>
+              </div>
+              <div class="w-20 h-14 rounded-xl bg-gray-100 border-2 border-transparent hover:border-surface-5 flex flex-col items-center justify-center cursor-pointer">
+                <div class="w-10 h-1.5 bg-gray-300 rounded mb-1"></div>
+                <div class="w-8 h-1 bg-gray-200 rounded mb-0.5"></div>
+                <div class="w-6 h-1 bg-gray-200 rounded"></div>
+                <span class="text-[9px] text-gray-500 mt-1">Light</span>
+              </div>
+              <div class="w-20 h-14 rounded-xl bg-[#1a1520] border-2 border-transparent hover:border-surface-5 flex flex-col items-center justify-center cursor-pointer">
+                <div class="w-10 h-1.5 bg-purple-900/50 rounded mb-1"></div>
+                <div class="w-8 h-1 bg-purple-900/30 rounded mb-0.5"></div>
+                <div class="w-6 h-1 bg-purple-900/30 rounded"></div>
+                <span class="text-[9px] text-purple-300 mt-1">Purple</span>
+              </div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-xs text-txt-2 font-medium mb-1.5 block">Terminal Font</label>
+              <select class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+                <option>JetBrains Mono</option>
+                <option>Fira Code</option>
+                <option>Cascadia Code</option>
+                <option>Menlo</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-txt-2 font-medium mb-1.5 block">Font Size</label>
+              <div class="flex items-center gap-2">
+                <input type="range" min="10" max="20" value="14" class="flex-1 accent-brand-500">
+                <span class="text-sm text-txt-2 w-8 text-right">14px</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-txt-2 font-medium mb-1.5 block">Window Opacity</label>
+            <div class="flex items-center gap-2">
+              <input type="range" min="70" max="100" value="100" class="flex-1 accent-brand-500">
+              <span class="text-sm text-txt-2 w-10 text-right">100%</span>
+            </div>
+          </div>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">Acrylic Background</div><div class="text-[11px] text-txt-3">Enable transparent blur effect</div></div>
+              <div class="toggle-track" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">Show Tab Bar Icons</div><div class="text-[11px] text-txt-3">Display connection status icons in tabs</div></div>
+              <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">Compact Sidebar</div><div class="text-[11px] text-txt-3">Reduce sidebar item spacing</div></div>
+              <div class="toggle-track" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== Tab: Terminal ====== -->
+        <div id="settings-terminal" class="settings-panel hidden flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-xs text-txt-2 font-medium mb-1.5 block">Shell</label>
+              <select class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+                <option>Default (Login Shell)</option>
+                <option>/bin/bash</option>
+                <option>/bin/zsh</option>
+                <option>/usr/bin/fish</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-txt-2 font-medium mb-1.5 block">Encoding</label>
+              <select class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+                <option>UTF-8</option>
+                <option>GBK</option>
+                <option>GB2312</option>
+                <option>ISO-8859-1</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-xs text-txt-2 font-medium mb-1.5 block">Scrollback Lines</label>
+              <input type="number" value="10000" class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+            </div>
+            <div>
+              <label class="text-xs text-txt-2 font-medium mb-1.5 block">Cursor Style</label>
+              <div class="flex gap-2">
+                <button class="flex-1 py-2 text-xs rounded-lg border bg-brand-500/10 border-brand-500/30 text-brand-400">Block <span class="inline-block w-2 h-3 bg-brand-400 ml-1 align-middle"></span></button>
+                <button class="flex-1 py-2 text-xs rounded-lg border bg-surface-3 border-surface-5/50 text-txt-2">Underline <span class="inline-block w-2 h-0.5 bg-txt-3 ml-1 align-middle"></span></button>
+                <button class="flex-1 py-2 text-xs rounded-lg border bg-surface-3 border-surface-5/50 text-txt-2">Bar <span class="inline-block w-0.5 h-3 bg-txt-3 ml-1 align-middle"></span></button>
+              </div>
+            </div>
+          </div>
+          <!-- Color Scheme Preview -->
+          <div>
+            <label class="text-xs text-txt-2 font-medium mb-2 block">Color Scheme</label>
+            <div class="grid grid-cols-4 gap-2">
+              <div class="p-2 bg-surface-0 rounded-lg border-2 border-brand-500 cursor-pointer">
+                <div class="flex gap-1 mb-1.5">
+                  <div class="w-3 h-3 rounded-sm bg-[#1a1a2e]"></div><div class="w-3 h-3 rounded-sm bg-[#ef4444]"></div>
+                  <div class="w-3 h-3 rounded-sm bg-[#22c55e]"></div><div class="w-3 h-3 rounded-sm bg-[#f59e0b]"></div>
+                </div>
+                <div class="flex gap-1">
+                  <div class="w-3 h-3 rounded-sm bg-[#6366f1]"></div><div class="w-3 h-3 rounded-sm bg-[#a855f7]"></div>
+                  <div class="w-3 h-3 rounded-sm bg-[#06b6d4]"></div><div class="w-3 h-3 rounded-sm bg-[#f0f0f5]"></div>
+                </div>
+                <span class="text-[9px] text-brand-400 mt-1 block">Termex</span>
+              </div>
+              <div class="p-2 bg-[#002b36] rounded-lg border-2 border-transparent hover:border-surface-5 cursor-pointer">
+                <div class="flex gap-1 mb-1.5">
+                  <div class="w-3 h-3 rounded-sm bg-[#073642]"></div><div class="w-3 h-3 rounded-sm bg-[#dc322f]"></div>
+                  <div class="w-3 h-3 rounded-sm bg-[#859900]"></div><div class="w-3 h-3 rounded-sm bg-[#b58900]"></div>
+                </div>
+                <div class="flex gap-1">
+                  <div class="w-3 h-3 rounded-sm bg-[#268bd2]"></div><div class="w-3 h-3 rounded-sm bg-[#d33682]"></div>
+                  <div class="w-3 h-3 rounded-sm bg-[#2aa198]"></div><div class="w-3 h-3 rounded-sm bg-[#eee8d5]"></div>
+                </div>
+                <span class="text-[9px] text-txt-3 mt-1 block">Solarized</span>
+              </div>
+              <div class="p-2 bg-[#282c34] rounded-lg border-2 border-transparent hover:border-surface-5 cursor-pointer">
+                <div class="flex gap-1 mb-1.5">
+                  <div class="w-3 h-3 rounded-sm bg-[#3e4451]"></div><div class="w-3 h-3 rounded-sm bg-[#e06c75]"></div>
+                  <div class="w-3 h-3 rounded-sm bg-[#98c379]"></div><div class="w-3 h-3 rounded-sm bg-[#e5c07b]"></div>
+                </div>
+                <div class="flex gap-1">
+                  <div class="w-3 h-3 rounded-sm bg-[#61afef]"></div><div class="w-3 h-3 rounded-sm bg-[#c678dd]"></div>
+                  <div class="w-3 h-3 rounded-sm bg-[#56b6c2]"></div><div class="w-3 h-3 rounded-sm bg-[#abb2bf]"></div>
+                </div>
+                <span class="text-[9px] text-txt-3 mt-1 block">One Dark</span>
+              </div>
+              <div class="p-2 bg-[#1e1e2e] rounded-lg border-2 border-transparent hover:border-surface-5 cursor-pointer">
+                <div class="flex gap-1 mb-1.5">
+                  <div class="w-3 h-3 rounded-sm bg-[#313244]"></div><div class="w-3 h-3 rounded-sm bg-[#f38ba8]"></div>
+                  <div class="w-3 h-3 rounded-sm bg-[#a6e3a1]"></div><div class="w-3 h-3 rounded-sm bg-[#f9e2af]"></div>
+                </div>
+                <div class="flex gap-1">
+                  <div class="w-3 h-3 rounded-sm bg-[#89b4fa]"></div><div class="w-3 h-3 rounded-sm bg-[#cba6f7]"></div>
+                  <div class="w-3 h-3 rounded-sm bg-[#94e2d5]"></div><div class="w-3 h-3 rounded-sm bg-[#cdd6f4]"></div>
+                </div>
+                <span class="text-[9px] text-txt-3 mt-1 block">Catppuccin</span>
+              </div>
+            </div>
+          </div>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">Cursor Blink</div><div class="text-[11px] text-txt-3">Animate terminal cursor blinking</div></div>
+              <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">Bell Sound</div><div class="text-[11px] text-txt-3">Play sound on terminal bell character</div></div>
+              <div class="toggle-track" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">Copy on Select</div><div class="text-[11px] text-txt-3">Automatically copy text when selected</div></div>
+              <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">Right Click Paste</div><div class="text-[11px] text-txt-3">Paste clipboard content on right click</div></div>
+              <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">WebGL Renderer</div><div class="text-[11px] text-txt-3">Use GPU acceleration for terminal rendering</div></div>
+              <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== Tab: Keybindings ====== -->
+        <div id="settings-keybindings" class="settings-panel hidden flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div class="flex items-center justify-between mb-1">
+            <p class="text-xs text-txt-3">Click any shortcut to rebind. Press <kbd class="bg-surface-3 px-1.5 py-0.5 rounded text-[10px]">Esc</kbd> to cancel.</p>
+            <button class="text-xs text-brand-400 hover:text-brand-500 transition-colors"><i class="fa-solid fa-rotate-left mr-1"></i>Reset All</button>
+          </div>
+          <!-- Search -->
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-txt-3 text-xs"></i>
+            <input type="text" placeholder="Search keybindings..." class="w-full bg-surface-3 text-sm text-txt-1 placeholder-txt-3 pl-8 pr-3 py-2 rounded-lg border border-surface-5/50">
+          </div>
+          <!-- Keybinding list -->
+          <div class="space-y-1">
+            <div class="text-[10px] text-txt-3 font-medium uppercase tracking-wider px-1 pt-2 pb-1">General</div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">New Connection</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+N</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Settings</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+,</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Toggle Sidebar</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+B</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Command Palette</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+Shift+P</kbd>
+            </div>
+            <div class="text-[10px] text-txt-3 font-medium uppercase tracking-wider px-1 pt-3 pb-1">Tabs</div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Next Tab</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+Tab</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Previous Tab</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+Shift+Tab</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Close Tab</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+W</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Go to Tab 1-9</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+1~9</kbd>
+            </div>
+            <div class="text-[10px] text-txt-3 font-medium uppercase tracking-wider px-1 pt-3 pb-1">Terminal</div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Copy</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+Shift+C</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Paste</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+Shift+V</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Search in Terminal</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+F</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Clear Terminal</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+L</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Split Horizontal</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+Shift+H</kbd>
+            </div>
+            <div class="text-[10px] text-txt-3 font-medium uppercase tracking-wider px-1 pt-3 pb-1">AI</div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Toggle AI Panel</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+I</kbd>
+            </div>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-3/50 transition-colors">
+              <span class="text-sm text-txt-1">Explain Command</span>
+              <kbd class="bg-surface-3 text-xs text-txt-2 px-2 py-1 rounded-md border border-surface-5/30 font-mono">Ctrl+E</kbd>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== Tab: Security ====== -->
+        <div id="settings-security" class="settings-panel hidden flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          <!-- Master Password -->
+          <div>
+            <label class="text-xs text-txt-2 font-medium mb-2 block">Master Password</label>
+            <p class="text-[11px] text-txt-3 mb-3">Master password is used to encrypt all stored credentials. Changing it will re-encrypt all existing data.</p>
+            <div class="grid grid-cols-2 gap-3">
+              <input type="password" placeholder="Current password" class="bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+              <input type="password" placeholder="New password" class="bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+            </div>
+            <button class="mt-3 px-4 py-1.5 bg-brand-500/10 text-xs text-brand-400 rounded-lg border border-brand-500/20 hover:bg-brand-500/20 transition-colors">
+              Update Master Password
+            </button>
+          </div>
+          <!-- Encryption Info -->
+          <div class="bg-surface-3/50 rounded-xl p-4 border border-surface-4/30">
+            <div class="flex items-center gap-2 mb-2">
+              <i class="fa-solid fa-lock text-success text-sm"></i>
+              <span class="text-sm font-medium text-txt-1">Encryption Status</span>
+            </div>
+            <div class="grid grid-cols-2 gap-y-2 text-xs">
+              <span class="text-txt-3">Algorithm</span><span class="text-txt-1">AES-256-GCM</span>
+              <span class="text-txt-3">Key Derivation</span><span class="text-txt-1">Argon2id</span>
+              <span class="text-txt-3">Database</span><span class="text-txt-1">SQLCipher (Encrypted)</span>
+              <span class="text-txt-3">Stored Credentials</span><span class="text-txt-1">7 passwords, 3 keys</span>
+            </div>
+          </div>
+          <!-- SSH Keys -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs text-txt-2 font-medium">SSH Key Management</label>
+              <button class="text-xs text-brand-400 hover:text-brand-500 transition-colors"><i class="fa-solid fa-plus mr-1"></i>Import Key</button>
+            </div>
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between bg-surface-3/40 rounded-lg px-3 py-2">
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-key text-yellow-500/70 text-xs"></i>
+                  <div>
+                    <div class="text-sm text-txt-1">id_rsa</div>
+                    <div class="text-[10px] text-txt-3">RSA 4096-bit &middot; ~/.ssh/id_rsa</div>
+                  </div>
+                </div>
+                <button class="text-txt-3 hover:text-danger text-xs"><i class="fa-solid fa-trash"></i></button>
+              </div>
+              <div class="flex items-center justify-between bg-surface-3/40 rounded-lg px-3 py-2">
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-key text-blue-400/70 text-xs"></i>
+                  <div>
+                    <div class="text-sm text-txt-1">id_ed25519</div>
+                    <div class="text-[10px] text-txt-3">Ed25519 &middot; ~/.ssh/id_ed25519</div>
+                  </div>
+                </div>
+                <button class="text-txt-3 hover:text-danger text-xs"><i class="fa-solid fa-trash"></i></button>
+              </div>
+              <div class="flex items-center justify-between bg-surface-3/40 rounded-lg px-3 py-2">
+                <div class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-key text-green-400/70 text-xs"></i>
+                  <div>
+                    <div class="text-sm text-txt-1">deploy_key</div>
+                    <div class="text-[10px] text-txt-3">RSA 2048-bit &middot; ~/.ssh/deploy_key</div>
+                  </div>
+                </div>
+                <button class="text-txt-3 hover:text-danger text-xs"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+          <!-- Options -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">Auto-lock on Idle</div><div class="text-[11px] text-txt-3">Lock app after 15 minutes of inactivity</div></div>
+              <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">Host Key Verification</div><div class="text-[11px] text-txt-3">Verify server fingerprint on first connection</div></div>
+              <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div><div class="text-sm text-txt-1">Clipboard Clear on Lock</div><div class="text-[11px] text-txt-3">Clear clipboard when app locks</div></div>
+              <div class="toggle-track" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== Tab: AI Config ====== -->
+        <div id="settings-ai" class="settings-panel hidden flex-1 overflow-y-auto px-6 py-4 space-y-5">
+
+          <!-- Provider List -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs text-txt-2 font-medium">AI Providers</label>
+              <button onclick="showProviderForm('add')" class="text-xs text-brand-400 hover:text-brand-500 transition-colors"><i class="fa-solid fa-plus mr-1"></i>Add Provider</button>
+            </div>
+            <p class="text-[11px] text-txt-3 mb-3">Configure multiple AI providers. Click the star to set the default provider for all AI features.</p>
+            <div id="ai-provider-list" class="space-y-1.5">
+              <!-- Provider: Claude (default) -->
+              <div class="flex items-center gap-3 bg-surface-3/40 rounded-lg px-3 py-2.5 border border-brand-500/20">
+                <button onclick="setDefaultProvider(this)" class="text-brand-400 text-sm shrink-0" title="Default Provider">
+                  <i class="fa-solid fa-star"></i>
+                </button>
+                <div class="flex items-center gap-2 flex-1 min-w-0">
+                  <i class="fa-solid fa-cloud text-brand-400 text-sm shrink-0"></i>
+                  <div class="min-w-0">
+                    <div class="text-sm text-txt-1 flex items-center gap-2">
+                      Claude
+                      <span class="text-[9px] bg-brand-500/15 text-brand-400 px-1.5 py-0.5 rounded-full">Default</span>
+                    </div>
+                    <div class="text-[10px] text-txt-3 truncate">claude-sonnet-4-20250514 &middot; sk-ant-***xxxx</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <button onclick="showProviderForm('edit-claude')" class="text-txt-3 hover:text-txt-1 text-xs px-1.5 py-1 rounded hover:bg-surface-4/50 transition-colors" title="Edit"><i class="fa-solid fa-pen"></i></button>
+                  <button class="text-txt-3 hover:text-danger text-xs px-1.5 py-1 rounded hover:bg-danger/10 transition-colors" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                </div>
+              </div>
+              <!-- Provider: OpenAI -->
+              <div class="flex items-center gap-3 bg-surface-3/40 rounded-lg px-3 py-2.5">
+                <button onclick="setDefaultProvider(this)" class="text-txt-3 hover:text-yellow-400 text-sm shrink-0 transition-colors" title="Set as Default">
+                  <i class="fa-regular fa-star"></i>
+                </button>
+                <div class="flex items-center gap-2 flex-1 min-w-0">
+                  <i class="fa-solid fa-robot text-green-400 text-sm shrink-0"></i>
+                  <div class="min-w-0">
+                    <div class="text-sm text-txt-1">OpenAI</div>
+                    <div class="text-[10px] text-txt-3 truncate">gpt-4o &middot; sk-proj-***abcd</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <button onclick="showProviderForm('edit-openai')" class="text-txt-3 hover:text-txt-1 text-xs px-1.5 py-1 rounded hover:bg-surface-4/50 transition-colors" title="Edit"><i class="fa-solid fa-pen"></i></button>
+                  <button class="text-txt-3 hover:text-danger text-xs px-1.5 py-1 rounded hover:bg-danger/10 transition-colors" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                </div>
+              </div>
+              <!-- Provider: Ollama -->
+              <div class="flex items-center gap-3 bg-surface-3/40 rounded-lg px-3 py-2.5">
+                <button onclick="setDefaultProvider(this)" class="text-txt-3 hover:text-yellow-400 text-sm shrink-0 transition-colors" title="Set as Default">
+                  <i class="fa-regular fa-star"></i>
+                </button>
+                <div class="flex items-center gap-2 flex-1 min-w-0">
+                  <i class="fa-solid fa-server text-orange-400 text-sm shrink-0"></i>
+                  <div class="min-w-0">
+                    <div class="text-sm text-txt-1 flex items-center gap-2">
+                      Ollama
+                      <span class="text-[9px] bg-green-500/15 text-green-400 px-1.5 py-0.5 rounded-full">Local</span>
+                    </div>
+                    <div class="text-[10px] text-txt-3 truncate">qwen2.5:14b &middot; localhost:11434</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <button onclick="showProviderForm('edit-ollama')" class="text-txt-3 hover:text-txt-1 text-xs px-1.5 py-1 rounded hover:bg-surface-4/50 transition-colors" title="Edit"><i class="fa-solid fa-pen"></i></button>
+                  <button class="text-txt-3 hover:text-danger text-xs px-1.5 py-1 rounded hover:bg-danger/10 transition-colors" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Provider Edit Form (hidden by default, shown on Add/Edit click) -->
+          <div id="ai-provider-form" class="hidden">
+            <div class="bg-surface-3/30 rounded-xl p-4 border border-surface-4/30 space-y-4">
+              <div class="flex items-center justify-between">
+                <span id="ai-form-title" class="text-xs font-medium text-txt-1"><i class="fa-solid fa-plus text-brand-400 mr-1.5"></i>Add Provider</span>
+                <button onclick="hideProviderForm()" class="text-txt-3 hover:text-txt-1 text-xs"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+              <!-- Provider Type -->
+              <div>
+                <label class="text-[10px] text-txt-3 mb-1.5 block">Provider Type</label>
+                <select id="ai-form-type" onchange="onProviderTypeChange(this.value)" class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+                  <option value="claude">Anthropic (Claude)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="ollama">Ollama (Local)</option>
+                  <option value="custom">Custom OpenAI-compatible</option>
+                </select>
+              </div>
+              <!-- Name -->
+              <div>
+                <label class="text-[10px] text-txt-3 mb-1.5 block">Display Name</label>
+                <input type="text" placeholder="e.g. My Claude Key" class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+              </div>
+              <!-- API Fields (for cloud providers) -->
+              <div id="ai-form-api-fields">
+                <div class="space-y-3">
+                  <div>
+                    <label class="text-[10px] text-txt-3 mb-1.5 block">API Key</label>
+                    <div class="flex gap-2">
+                      <input type="password" placeholder="sk-ant-api03-..." class="flex-1 bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50 font-mono">
+                      <button class="px-3 py-2 bg-surface-3 text-xs text-txt-2 rounded-lg border border-surface-5/50 hover:bg-surface-4 transition-colors">
+                        <i class="fa-solid fa-eye"></i>
+                      </button>
+                    </div>
+                    <p class="text-[10px] text-txt-3 mt-1"><i class="fa-solid fa-shield-halved text-[9px] text-success mr-1"></i>Encrypted locally. Never sent to Termex servers.</p>
+                  </div>
+                  <div>
+                    <label class="text-[10px] text-txt-3 mb-1.5 block">Model</label>
+                    <select class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+                      <option>claude-sonnet-4-20250514</option>
+                      <option>claude-3-5-haiku-20241022</option>
+                      <option>claude-opus-4-20250514</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <!-- Ollama Fields (hidden by default) -->
+              <div id="ai-form-ollama-fields" class="hidden space-y-3">
+                <div>
+                  <label class="text-[10px] text-txt-3 mb-1.5 block">Server URL</label>
+                  <input type="text" value="http://localhost:11434" class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50 font-mono">
+                </div>
+                <div>
+                  <label class="text-[10px] text-txt-3 mb-1.5 block">Model</label>
+                  <select class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+                    <option>qwen2.5:14b</option>
+                    <option>llama3:8b</option>
+                    <option>codellama:13b</option>
+                    <option>mistral:7b</option>
+                    <option>deepseek-coder:6.7b</option>
+                  </select>
+                </div>
+              </div>
+              <!-- Custom Endpoint (hidden by default) -->
+              <div id="ai-form-custom-fields" class="hidden space-y-3">
+                <div>
+                  <label class="text-[10px] text-txt-3 mb-1.5 block">API Base URL</label>
+                  <input type="text" placeholder="https://api.example.com/v1" class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50 font-mono">
+                </div>
+                <div>
+                  <label class="text-[10px] text-txt-3 mb-1.5 block">API Key</label>
+                  <input type="password" placeholder="your-api-key" class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50 font-mono">
+                </div>
+                <div>
+                  <label class="text-[10px] text-txt-3 mb-1.5 block">Model Name</label>
+                  <input type="text" placeholder="model-id" class="w-full bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+                </div>
+              </div>
+              <!-- Actions -->
+              <div class="flex items-center justify-between pt-1">
+                <button class="text-xs text-txt-3 hover:text-success transition-colors"><i class="fa-solid fa-plug mr-1"></i>Test Connection</button>
+                <div class="flex gap-2">
+                  <button onclick="hideProviderForm()" class="px-3 py-1.5 text-xs text-txt-2 rounded-lg hover:bg-surface-4 transition-colors">Cancel</button>
+                  <button onclick="hideProviderForm()" class="px-4 py-1.5 text-xs text-white rounded-lg btn-primary">Save</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Divider -->
+          <div class="h-px bg-surface-4/30"></div>
+
+          <!-- AI Features -->
+          <div>
+            <label class="text-xs text-txt-2 font-medium mb-2 block">AI Features</label>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div><div class="text-sm text-txt-1">Dangerous Command Detection</div><div class="text-[11px] text-txt-3">Block rm -rf, mkfs, dd and other destructive commands</div></div>
+                <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+              </div>
+              <div class="flex items-center justify-between">
+                <div><div class="text-sm text-txt-1">Smart Autocomplete</div><div class="text-[11px] text-txt-3">AI-powered command suggestions based on context</div></div>
+                <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+              </div>
+              <div class="flex items-center justify-between">
+                <div><div class="text-sm text-txt-1">Natural Language Input</div><div class="text-[11px] text-txt-3">Convert plain language to shell commands</div></div>
+                <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+              </div>
+              <div class="flex items-center justify-between">
+                <div><div class="text-sm text-txt-1">Command Explanation</div><div class="text-[11px] text-txt-3">Right-click to explain any command with AI</div></div>
+                <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== Tab: Backup ====== -->
+        <div id="settings-backup" class="settings-panel hidden flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          <!-- Export -->
+          <div>
+            <label class="text-xs text-txt-2 font-medium mb-2 block">Export Configuration</label>
+            <p class="text-[11px] text-txt-3 mb-3">Export all server connections, groups, and settings to an encrypted file. Use this to migrate to another device or create a backup.</p>
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <input type="checkbox" checked class="accent-brand-500"> <span class="text-sm text-txt-1">Server connections & groups</span>
+                <span class="text-[10px] text-txt-3 ml-auto">7 servers, 3 groups</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <input type="checkbox" checked class="accent-brand-500"> <span class="text-sm text-txt-1">Saved credentials (passwords & keys)</span>
+                <span class="text-[10px] text-txt-3 ml-auto">7 passwords, 3 keys</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <input type="checkbox" checked class="accent-brand-500"> <span class="text-sm text-txt-1">App settings & preferences</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <input type="checkbox" class="accent-brand-500"> <span class="text-sm text-txt-1">Port forwarding rules</span>
+                <span class="text-[10px] text-txt-3 ml-auto">4 rules</span>
+              </div>
+            </div>
+            <div class="mt-3 flex items-center gap-3">
+              <input type="password" placeholder="Set export password (required)" class="flex-1 bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+              <button class="btn-primary px-5 py-2 text-sm text-white rounded-lg font-medium whitespace-nowrap">
+                <i class="fa-solid fa-file-export mr-1.5"></i>Export
+              </button>
+            </div>
+            <p class="text-[10px] text-txt-3 mt-1.5"><i class="fa-solid fa-lock text-[9px] text-success mr-1"></i>Export file is AES-256-GCM encrypted. Password is required to import.</p>
+          </div>
+          <!-- Divider -->
+          <div class="h-px bg-surface-4/30"></div>
+          <!-- Import -->
+          <div>
+            <label class="text-xs text-txt-2 font-medium mb-2 block">Import Configuration</label>
+            <p class="text-[11px] text-txt-3 mb-3">Import a previously exported Termex configuration file. You will need the password that was set during export.</p>
+            <div class="border-2 border-dashed border-surface-4/50 rounded-xl p-6 text-center hover:border-brand-500/30 transition-colors cursor-pointer">
+              <i class="fa-solid fa-cloud-arrow-up text-2xl text-txt-3 mb-2"></i>
+              <div class="text-sm text-txt-2">Drop .termex file here or click to browse</div>
+              <div class="text-[10px] text-txt-3 mt-1">Supports .termex encrypted backup files</div>
+            </div>
+            <div class="mt-3 flex items-center gap-3">
+              <input type="password" placeholder="Enter import password" class="flex-1 bg-surface-3 text-sm text-txt-1 px-3 py-2 rounded-lg border border-surface-5/50">
+              <button class="px-5 py-2 text-sm text-txt-2 rounded-lg border border-surface-5/50 hover:bg-surface-3 transition-colors whitespace-nowrap">
+                <i class="fa-solid fa-file-import mr-1.5"></i>Import
+              </button>
+            </div>
+          </div>
+          <!-- Divider -->
+          <div class="h-px bg-surface-4/30"></div>
+          <!-- Auto Backup -->
+          <div>
+            <label class="text-xs text-txt-2 font-medium mb-2 block">Auto Backup</label>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div><div class="text-sm text-txt-1">Enable Auto Backup</div><div class="text-[11px] text-txt-3">Automatically backup config on changes</div></div>
+                <div class="toggle-track on" onclick="this.classList.toggle('on')"><div class="toggle-knob"></div></div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-[10px] text-txt-3 mb-1 block">Backup Location</label>
+                  <div class="flex gap-2">
+                    <input type="text" value="~/.termex/backups" readonly class="flex-1 bg-surface-3 text-xs text-txt-1 px-2.5 py-1.5 rounded border border-surface-5/50 font-mono">
+                    <button class="px-2.5 py-1.5 bg-surface-3 text-xs text-txt-2 rounded border border-surface-5/50 hover:bg-surface-4 transition-colors">Browse</button>
+                  </div>
+                </div>
+                <div>
+                  <label class="text-[10px] text-txt-3 mb-1 block">Keep Last</label>
+                  <select class="w-full bg-surface-3 text-xs text-txt-1 px-2.5 py-1.5 rounded border border-surface-5/50">
+                    <option>5 backups</option>
+                    <option>10 backups</option>
+                    <option selected>20 backups</option>
+                    <option>Unlimited</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== Tab: About ====== -->
+        <div id="settings-about" class="settings-panel hidden flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          <!-- Logo & Info -->
+          <div class="text-center py-4">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand-500/10 mb-3">
+              <i class="fa-solid fa-terminal text-brand-400 text-2xl"></i>
+            </div>
+            <h3 class="text-lg font-bold text-txt-1">Termex</h3>
+            <p class="text-xs text-txt-3 mt-0.5">Terminal + Experience</p>
+            <p class="text-sm text-txt-2 mt-1">Version 0.1.0-alpha</p>
+          </div>
+          <!-- Description -->
+          <div class="bg-surface-3/30 rounded-xl p-4 text-center">
+            <p class="text-sm text-txt-2 leading-relaxed">
+              Beautiful. Fast. Intelligent. Free.<br>
+              <span class="text-txt-3">An open-source, AI-native SSH client for developers.</span>
+            </p>
+          </div>
+          <!-- Links -->
+          <div class="space-y-1.5">
+            <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-surface-3/50 transition-colors group">
+              <div class="flex items-center gap-2.5">
+                <i class="fa-brands fa-github text-sm text-txt-3 w-5 text-center"></i>
+                <span class="text-sm text-txt-1">GitHub Repository</span>
+              </div>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-txt-3 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+            </a>
+            <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-surface-3/50 transition-colors group">
+              <div class="flex items-center gap-2.5">
+                <i class="fa-solid fa-book text-sm text-txt-3 w-5 text-center"></i>
+                <span class="text-sm text-txt-1">Documentation</span>
+              </div>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-txt-3 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+            </a>
+            <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-surface-3/50 transition-colors group">
+              <div class="flex items-center gap-2.5">
+                <i class="fa-brands fa-discord text-sm text-txt-3 w-5 text-center"></i>
+                <span class="text-sm text-txt-1">Discord Community</span>
+              </div>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-txt-3 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+            </a>
+            <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-surface-3/50 transition-colors group">
+              <div class="flex items-center gap-2.5">
+                <i class="fa-solid fa-bug text-sm text-txt-3 w-5 text-center"></i>
+                <span class="text-sm text-txt-1">Report a Bug</span>
+              </div>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-txt-3 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+            </a>
+            <a href="#" class="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-surface-3/50 transition-colors group">
+              <div class="flex items-center gap-2.5">
+                <i class="fa-solid fa-heart text-sm text-txt-3 w-5 text-center"></i>
+                <span class="text-sm text-txt-1">Sponsor this Project</span>
+              </div>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-txt-3 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+            </a>
+          </div>
+          <!-- Tech Stack & License -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-surface-3/30 rounded-xl p-3">
+              <div class="text-[10px] text-txt-3 uppercase tracking-wider mb-2">Tech Stack</div>
+              <div class="space-y-1 text-xs text-txt-2">
+                <div class="flex justify-between"><span>Runtime</span><span class="text-txt-1">Tauri v2</span></div>
+                <div class="flex justify-between"><span>Backend</span><span class="text-txt-1">Rust</span></div>
+                <div class="flex justify-between"><span>Frontend</span><span class="text-txt-1">Vue 3 + TS</span></div>
+                <div class="flex justify-between"><span>Terminal</span><span class="text-txt-1">xterm.js</span></div>
+              </div>
+            </div>
+            <div class="bg-surface-3/30 rounded-xl p-3">
+              <div class="text-[10px] text-txt-3 uppercase tracking-wider mb-2">License & Build</div>
+              <div class="space-y-1 text-xs text-txt-2">
+                <div class="flex justify-between"><span>License</span><span class="text-txt-1">MIT</span></div>
+                <div class="flex justify-between"><span>Build</span><span class="text-txt-1">#a1b2c3d</span></div>
+                <div class="flex justify-between"><span>Electron</span><span class="text-success">None :)</span></div>
+                <div class="flex justify-between"><span>Update</span><span class="text-success">Latest</span></div>
+              </div>
+            </div>
+          </div>
+          <!-- Check for updates -->
+          <div class="text-center">
+            <button class="px-4 py-2 bg-surface-3 text-xs text-txt-2 rounded-lg border border-surface-5/50 hover:bg-surface-4 transition-colors">
+              <i class="fa-solid fa-rotate mr-1.5"></i>Check for Updates
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Context Menu ===== -->
+  <div id="context-menu" class="hidden context-menu fixed z-50 bg-surface-2 border border-surface-4/50 rounded-xl shadow-2xl py-1.5 min-w-[180px]">
+    <div class="px-3 py-1.5 text-xs text-txt-3 font-medium" id="ctx-server-name">web-prod-01</div>
+    <div class="h-px bg-surface-4/30 my-1"></div>
+    <button class="w-full text-left px-3 py-1.5 text-sm text-txt-1 hover:bg-brand-500/10 flex items-center gap-2.5 transition-colors">
+      <i class="fa-solid fa-plug text-xs w-4 text-center text-success"></i> Connect
+    </button>
+    <button class="w-full text-left px-3 py-1.5 text-sm text-txt-1 hover:bg-brand-500/10 flex items-center gap-2.5 transition-colors">
+      <i class="fa-solid fa-folder-open text-xs w-4 text-center text-yellow-500"></i> Open SFTP
+    </button>
+    <button class="w-full text-left px-3 py-1.5 text-sm text-txt-1 hover:bg-brand-500/10 flex items-center gap-2.5 transition-colors">
+      <i class="fa-solid fa-network-wired text-xs w-4 text-center text-blue-400"></i> Port Forward
+    </button>
+    <div class="h-px bg-surface-4/30 my-1"></div>
+    <button class="w-full text-left px-3 py-1.5 text-sm text-txt-1 hover:bg-brand-500/10 flex items-center gap-2.5 transition-colors">
+      <i class="fa-solid fa-pen text-xs w-4 text-center text-txt-3"></i> Edit
+    </button>
+    <button class="w-full text-left px-3 py-1.5 text-sm text-txt-1 hover:bg-brand-500/10 flex items-center gap-2.5 transition-colors">
+      <i class="fa-solid fa-clone text-xs w-4 text-center text-txt-3"></i> Duplicate
+    </button>
+    <div class="h-px bg-surface-4/30 my-1"></div>
+    <button class="w-full text-left px-3 py-1.5 text-sm text-danger hover:bg-danger/10 flex items-center gap-2.5 transition-colors">
+      <i class="fa-solid fa-trash text-xs w-4 text-center"></i> Delete
+    </button>
+  </div>
+
+  <script>
+    // Settings tab switching
+    const settingsTitles = {
+      appearance: 'Appearance',
+      terminal: 'Terminal',
+      keybindings: 'Keybindings',
+      security: 'Security',
+      ai: 'AI Config',
+      backup: 'Backup',
+      about: 'About'
+    };
+
+    function switchSettingsTab(tabName, navEl) {
+      // Hide all panels
+      document.querySelectorAll('.settings-panel').forEach(p => p.classList.add('hidden'));
+      // Show target panel
+      document.getElementById('settings-' + tabName).classList.remove('hidden');
+      // Update nav active state
+      document.querySelectorAll('#settings-nav .sidebar-item').forEach(item => {
+        item.classList.remove('active');
+        item.classList.add('text-txt-2');
+      });
+      navEl.classList.add('active');
+      navEl.classList.remove('text-txt-2');
+      // Update title
+      document.getElementById('settings-title').textContent = settingsTitles[tabName] || tabName;
+    }
+
+    // AI Provider form
+    function showProviderForm(mode) {
+      const form = document.getElementById('ai-provider-form');
+      const title = document.getElementById('ai-form-title');
+      form.classList.remove('hidden');
+      if (mode === 'add') {
+        title.innerHTML = '<i class="fa-solid fa-plus text-brand-400 mr-1.5"></i>Add Provider';
+        document.getElementById('ai-form-type').value = 'claude';
+        onProviderTypeChange('claude');
+      } else {
+        title.innerHTML = '<i class="fa-solid fa-pen text-brand-400 mr-1.5"></i>Edit Provider';
+        const type = mode.replace('edit-', '');
+        document.getElementById('ai-form-type').value = type;
+        onProviderTypeChange(type);
+      }
+      form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function hideProviderForm() {
+      document.getElementById('ai-provider-form').classList.add('hidden');
+    }
+
+    function onProviderTypeChange(type) {
+      const apiFields = document.getElementById('ai-form-api-fields');
+      const ollamaFields = document.getElementById('ai-form-ollama-fields');
+      const customFields = document.getElementById('ai-form-custom-fields');
+      apiFields.classList.add('hidden');
+      ollamaFields.classList.add('hidden');
+      customFields.classList.add('hidden');
+      if (type === 'claude' || type === 'openai') {
+        apiFields.classList.remove('hidden');
+      } else if (type === 'ollama') {
+        ollamaFields.classList.remove('hidden');
+      } else if (type === 'custom') {
+        customFields.classList.remove('hidden');
+      }
+    }
+
+    function setDefaultProvider(btn) {
+      // Reset all stars
+      document.querySelectorAll('#ai-provider-list > div').forEach(row => {
+        const starBtn = row.querySelector('button:first-child');
+        starBtn.innerHTML = '<i class="fa-regular fa-star"></i>';
+        starBtn.className = 'text-txt-3 hover:text-yellow-400 text-sm shrink-0 transition-colors';
+        row.classList.remove('border', 'border-brand-500/20');
+        // Remove default badge
+        const badge = row.querySelector('span[class*="rounded-full"]');
+        if (badge && badge.textContent === 'Default') badge.remove();
+      });
+      // Set clicked as default
+      btn.innerHTML = '<i class="fa-solid fa-star"></i>';
+      btn.className = 'text-brand-400 text-sm shrink-0';
+      const row = btn.closest('#ai-provider-list > div');
+      row.classList.add('border', 'border-brand-500/20');
+      // Add badge
+      const nameEl = row.querySelector('.text-sm.text-txt-1');
+      if (!nameEl.querySelector('span')) {
+        const badge = document.createElement('span');
+        badge.className = 'text-[9px] bg-brand-500/15 text-brand-400 px-1.5 py-0.5 rounded-full';
+        badge.textContent = 'Default';
+        nameEl.appendChild(badge);
+      }
+    }
+
+    // Toggle functions
+    // Global tooltip for sidebar items (avoids overflow:hidden clipping)
+    const globalTooltip = document.getElementById('global-tooltip');
+    let tooltipTimer = null;
+
+    document.addEventListener('mouseover', (e) => {
+      const tipSource = e.target.closest('.group\\/tip');
+      if (!tipSource) return;
+      const tipData = tipSource.querySelector('.tooltip-hover');
+      if (!tipData) return;
+      tipSource._tipText = tipData.textContent;
+      clearTimeout(tooltipTimer);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      const tipSource = e.target.closest('.group\\/tip');
+      if (!tipSource || !tipSource._tipText) {
+        clearTimeout(tooltipTimer);
+        globalTooltip.classList.remove('visible');
+        return;
+      }
+      if (globalTooltip.classList.contains('visible')) {
+        // Already showing, follow mouse instantly
+        globalTooltip.style.left = (e.clientX + 14) + 'px';
+        globalTooltip.style.top = (e.clientY - 10) + 'px';
+      } else {
+        clearTimeout(tooltipTimer);
+        tooltipTimer = setTimeout(() => {
+          globalTooltip.textContent = tipSource._tipText;
+          globalTooltip.style.left = (e.clientX + 14) + 'px';
+          globalTooltip.style.top = (e.clientY - 10) + 'px';
+          globalTooltip.style.transform = 'none';
+          globalTooltip.classList.add('visible');
+        }, 400);
+      }
+    });
+
+    document.addEventListener('mouseout', (e) => {
+      const tipSource = e.target.closest('.group\\/tip');
+      if (!tipSource) return;
+      clearTimeout(tooltipTimer);
+      globalTooltip.classList.remove('visible');
+    });
+
+    // Sidebar dropdown menu
+    function toggleSidebarMenu() {
+      document.getElementById('sidebar-menu').classList.toggle('hidden');
+    }
+
+    // Sidebar search toggle
+    let sidebarSearchOpen = false;
+    function toggleSidebarSearch() {
+      const box = document.getElementById('sidebar-search-box');
+      const input = document.getElementById('sidebar-search-input');
+      sidebarSearchOpen = !sidebarSearchOpen;
+      if (sidebarSearchOpen) {
+        box.classList.remove('hidden');
+        setTimeout(() => input.focus(), 50);
+      } else {
+        box.classList.add('hidden');
+        input.value = '';
+      }
+    }
+
+    // Sidebar toggle
+    let sidebarOpen = true;
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const splitHandle = document.getElementById('sidebar-split-handle');
+      const btn = document.getElementById('sidebar-toggle-btn');
+      sidebarOpen = !sidebarOpen;
+      if (sidebarOpen) {
+        sidebar.style.width = '240px';
+        sidebar.style.minWidth = '0px';
+        splitHandle.classList.remove('hidden');
+        btn.innerHTML = '<i class="fa-solid fa-bars"></i>';
+        btn.title = 'Hide Sidebar (Ctrl+B)';
+      } else {
+        sidebar.style.width = '0px';
+        sidebar.style.minWidth = '0px';
+        splitHandle.classList.add('hidden');
+        btn.innerHTML = '<i class="fa-solid fa-bars"></i>';
+        btn.title = 'Show Sidebar (Ctrl+B)';
+      }
+    }
+
+    function toggleAiPanel() {
+      document.getElementById('ai-panel').classList.toggle('hidden');
+    }
+
+    function toggleSftp() {
+      document.getElementById('sftp-panel').classList.toggle('hidden');
+    }
+
+    function toggleConnectModal() {
+      document.getElementById('connect-modal').classList.toggle('hidden');
+    }
+
+    function toggleSettings() {
+      document.getElementById('settings-modal').classList.toggle('hidden');
+    }
+
+    function togglePortForward() {
+      const section = document.getElementById('port-forward-section');
+      const icon = document.getElementById('pf-icon');
+      section.classList.toggle('hidden');
+      icon.style.transform = section.classList.contains('hidden') ? '' : 'rotate(90deg)';
+    }
+
+    // Tab switching
+    function switchTab(el) {
+      document.querySelectorAll('.tab').forEach(t => {
+        t.classList.remove('active');
+        t.querySelector('span')?.classList.add('text-txt-2');
+      });
+      el.classList.add('active');
+      el.querySelector('span')?.classList.remove('text-txt-2');
+    }
+
+    // Group toggle
+    function toggleGroup(el) {
+      const children = el.nextElementSibling;
+      const icon = el.querySelector('.group-folder-icon');
+      if (children) {
+        children.classList.toggle('hidden');
+        icon.style.transform = children.classList.contains('hidden') ? 'rotate(-90deg)' : '';
+      }
+    }
+
+    // Auth switch
+    function switchAuth(type) {
+      const pwdBtn = document.getElementById('auth-password-btn');
+      const keyBtn = document.getElementById('auth-key-btn');
+      const pwdInput = document.getElementById('auth-password');
+      const keyInput = document.getElementById('auth-key');
+
+      if (type === 'password') {
+        pwdBtn.className = 'flex-1 py-2 text-xs rounded-lg border transition-colors bg-brand-500/10 border-brand-500/30 text-brand-400';
+        keyBtn.className = 'flex-1 py-2 text-xs rounded-lg border transition-colors bg-surface-3 border-surface-5/50 text-txt-2';
+        pwdInput.classList.remove('hidden');
+        keyInput.classList.add('hidden');
+      } else {
+        keyBtn.className = 'flex-1 py-2 text-xs rounded-lg border transition-colors bg-brand-500/10 border-brand-500/30 text-brand-400';
+        pwdBtn.className = 'flex-1 py-2 text-xs rounded-lg border transition-colors bg-surface-3 border-surface-5/50 text-txt-2';
+        keyInput.classList.remove('hidden');
+        pwdInput.classList.add('hidden');
+      }
+    }
+
+    // Context menu
+    function showContextMenu(e, serverName) {
+      e.preventDefault();
+      const menu = document.getElementById('context-menu');
+      document.getElementById('ctx-server-name').textContent = serverName;
+      menu.classList.remove('hidden');
+      menu.style.left = e.clientX + 'px';
+      menu.style.top = e.clientY + 'px';
+      // Boundary check
+      const rect = menu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) menu.style.left = (e.clientX - rect.width) + 'px';
+      if (rect.bottom > window.innerHeight) menu.style.top = (e.clientY - rect.height) + 'px';
+    }
+
+    // Close context menu & sidebar menu on click outside
+    document.addEventListener('click', (e) => {
+      document.getElementById('context-menu').classList.add('hidden');
+      // Close sidebar menu if clicking outside of it
+      if (!e.target.closest('#sidebar-menu') && !e.target.closest('#sidebar-menu-btn')) {
+        document.getElementById('sidebar-menu').classList.add('hidden');
+      }
+    });
+    document.addEventListener('contextmenu', (e) => {
+      if (!e.target.closest('[oncontextmenu]')) {
+        document.getElementById('context-menu').classList.add('hidden');
+      }
+    });
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(modal => {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.add('hidden');
+      });
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      // Escape: close modals & menus
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
+        document.getElementById('context-menu').classList.add('hidden');
+        hideProviderForm();
+      }
+      // Ctrl+B: Toggle sidebar
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        toggleSidebar();
+      }
+      // Ctrl+N: New connection
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        toggleConnectModal();
+      }
+      // Ctrl+,: Settings
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        toggleSettings();
+      }
+      // Ctrl+I: Toggle AI panel
+      if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+        e.preventDefault();
+        toggleAiPanel();
+      }
+    });
+  </script>
+
+</body>
+</html>
