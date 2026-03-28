@@ -11,8 +11,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ── Create release first so build jobs don't race ────────
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        id: create
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases \
+            -f tag_name="${{ github.ref_name }}" \
+            -f name="Termex ${{ github.ref_name }}" \
+            -f body="See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details." \
+            -F draft=false \
+            -F prerelease=false \
+            --jq '.id')
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build (${{ matrix.label }})
+    needs: create-release
     permissions:
       contents: write
     strategy:
@@ -117,7 +143,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # ── Build & Release ─────────────────────────────────────
+      # ── Build & Upload ─────────────────────────────────────
       - name: Build & upload release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -130,11 +156,7 @@ jobs:
           # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Termex ${{ github.ref_name }}"
-          releaseBody: "See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
 
       # ── macOS GateKeeper fix script ─────────────────────────
