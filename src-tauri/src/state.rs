@@ -46,20 +46,22 @@ impl AppState {
             plugin_registry: RwLock::new(plugin_registry),
         };
 
-        // Migrate legacy encrypted credentials to OS keychain
+        // Initialize keychain (reads single store entry → at most 1 OS prompt)
+        keychain::init();
+
+        // Migrate legacy DB encrypted fields to keychain (one-time)
         state.migrate_to_keychain();
 
-        // Preload all keychain credentials into in-memory cache
-        // so subsequent access never triggers OS password prompts
-        state.preload_credentials();
+        // Consolidate old per-entry keychain items into single store (one-time upgrade)
+        state.consolidate_keychain();
 
         Ok(state)
     }
 
-    /// Preloads all known keychain credentials into the in-memory cache.
-    /// This batch-reads from the OS keychain once on startup so that all
-    /// subsequent `keychain::get()` calls are served from memory.
-    fn preload_credentials(&self) {
+    /// One-time migration from old individual keychain entries to the new
+    /// single-store format. After this runs, all credentials live in one
+    /// keychain entry and future startups only need 1 OS prompt.
+    fn consolidate_keychain(&self) {
         if !keychain::is_available() {
             return;
         }
@@ -99,7 +101,7 @@ impl AppState {
         });
 
         if !keys.is_empty() {
-            keychain::preload(&keys);
+            keychain::consolidate_from_individual(&keys);
         }
     }
 

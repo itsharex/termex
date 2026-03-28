@@ -5,8 +5,9 @@
 //! - Windows: Credential Manager (DPAPI)
 //! - Linux: Secret Service (GNOME Keyring / KDE Wallet)
 //!
-//! An in-memory cache avoids repeated keychain prompts. Credentials are loaded
-//! once on startup (via `preload`) and served from memory thereafter.
+//! All credentials are stored in a **single keychain entry** as a JSON object,
+//! so the OS only prompts for the keychain password once per app session.
+//! An in-memory cache serves all reads after the initial load.
 
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
@@ -14,6 +15,8 @@ use std::sync::{OnceLock, RwLock};
 use thiserror::Error;
 
 const SERVICE_NAME: &str = "com.termex.app";
+/// Single keychain entry that holds all credentials as JSON.
+const STORE_KEY: &str = "__termex_store__";
 
 #[derive(Debug, Error)]
 pub enum KeychainError {
@@ -25,92 +28,127 @@ pub enum KeychainError {
     OperationFailed(String),
 }
 
+/// Global availability flag, computed once.
+static AVAILABLE: OnceLock<bool> = OnceLock::new();
+
 /// Returns a reference to the global in-memory credential cache.
 fn cache() -> &'static RwLock<HashMap<String, String>> {
     static CACHE: OnceLock<RwLock<HashMap<String, String>>> = OnceLock::new();
     CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-/// Checks whether the OS keychain is available by doing a real store+delete probe.
-pub fn is_available() -> bool {
-    let entry = match keyring::Entry::new(SERVICE_NAME, "__termex_probe__") {
-        Ok(e) => e,
-        Err(_) => return false,
-    };
-    // Attempt a real write — on headless Linux this will fail with DBus errors
-    if entry.set_password("probe").is_err() {
-        return false;
-    }
-    let _ = entry.delete_credential();
-    true
+/// Initializes the keychain module.
+///
+/// Reads all credentials from the single keychain entry into memory.
+/// On first launch, creates the entry. Returns whether keychain is available.
+/// **Triggers at most 1 OS password prompt per app session.**
+pub fn init() -> bool {
+    *AVAILABLE.get_or_init(|| {
+        let entry = match keyring::Entry::new(SERVICE_NAME, STORE_KEY) {
+            Ok(e) => e,
+            Err(_) => return false,
+        };
+        match entry.get_password() {
+            Ok(json_str) => {
+                // Parse and load into cache
+                if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&json_str) {
+                    if let Ok(mut c) = cache().write() {
+                        *c = map;
+                    }
+                }
+                true
+            }
+            Err(keyring::Error::NoEntry) => {
+                // First launch: create empty store
+                entry.set_password("{}").is_ok()
+            }
+            Err(_) => false,
+        }
+    })
 }
 
-/// Stores a credential in the OS keychain and updates the in-memory cache.
+/// Returns whether the OS keychain is available. Calls `init()` lazily.
+pub fn is_available() -> bool {
+    init()
+}
+
+/// Writes the entire in-memory cache to the single keychain entry.
+fn flush() {
+    let map = match cache().read() {
+        Ok(c) => c.clone(),
+        Err(_) => return,
+    };
+    let json_str = match serde_json::to_string(&map) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, STORE_KEY) {
+        let _ = entry.set_password(&json_str);
+    }
+}
+
+/// Stores a credential in the cache and flushes to keychain.
 pub fn store(key: &str, value: &str) -> Result<(), KeychainError> {
-    let entry = keyring::Entry::new(SERVICE_NAME, key)
-        .map_err(|e| KeychainError::NotAvailable(e.to_string()))?;
-    entry
-        .set_password(value)
-        .map_err(|e| KeychainError::OperationFailed(e.to_string()))?;
-    // Update cache
     if let Ok(mut c) = cache().write() {
         c.insert(key.to_string(), value.to_string());
     }
+    flush();
     Ok(())
 }
 
-/// Retrieves a credential. Returns from in-memory cache if available,
-/// otherwise reads from OS keychain and caches the result.
+/// Retrieves a credential from the in-memory cache.
+/// Never touches the OS keychain — all reads are from memory.
 pub fn get(key: &str) -> Result<String, KeychainError> {
-    // Check cache first
     if let Ok(c) = cache().read() {
         if let Some(value) = c.get(key) {
             return Ok(value.clone());
         }
     }
-    // Cache miss: read from OS keychain
-    let entry = keyring::Entry::new(SERVICE_NAME, key)
-        .map_err(|e| KeychainError::NotAvailable(e.to_string()))?;
-    let value = entry
-        .get_password()
-        .map_err(|e| KeychainError::NotFound(e.to_string()))?;
-    // Store in cache for future reads
-    if let Ok(mut c) = cache().write() {
-        c.insert(key.to_string(), value.clone());
-    }
-    Ok(value)
+    Err(KeychainError::NotFound(key.to_string()))
 }
 
-/// Deletes a credential from both the in-memory cache and the OS keychain.
+/// Deletes a credential from the cache and flushes to keychain.
 pub fn delete(key: &str) -> Result<(), KeychainError> {
-    // Remove from cache
-    if let Ok(mut c) = cache().write() {
-        c.remove(key);
+    let removed = if let Ok(mut c) = cache().write() {
+        c.remove(key).is_some()
+    } else {
+        false
+    };
+    if removed {
+        flush();
     }
-    // Delete from OS keychain
-    let entry = keyring::Entry::new(SERVICE_NAME, key)
-        .map_err(|e| KeychainError::NotAvailable(e.to_string()))?;
-    // Ignore "not found" errors on delete
-    match entry.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(KeychainError::OperationFailed(e.to_string())),
-    }
+    Ok(())
 }
 
-/// Batch-loads credentials from the OS keychain into the in-memory cache.
-/// Call once on startup to avoid repeated keychain password prompts.
-pub fn preload(keys: &[String]) {
-    let mut c = match cache().write() {
-        Ok(c) => c,
-        Err(_) => return,
-    };
-    for key in keys {
-        if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
-            if let Ok(value) = entry.get_password() {
-                c.insert(key.clone(), value);
+/// One-time migration: reads credentials from old individual keychain entries
+/// into the single-store format. Call once after upgrading from per-entry storage.
+/// After this runs, all subsequent startups only need 1 keychain read.
+pub fn consolidate_from_individual(keys: &[String]) {
+    if !is_available() || keys.is_empty() {
+        return;
+    }
+    let mut found_any = false;
+    {
+        let mut c = match cache().write() {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        for key in keys {
+            // Skip if already in the new single store
+            if c.contains_key(key) {
+                continue;
+            }
+            // Try reading from old individual keychain entry
+            if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
+                if let Ok(value) = entry.get_password() {
+                    c.insert(key.clone(), value);
+                    found_any = true;
+                }
             }
         }
+    }
+    if found_any {
+        flush();
     }
 }
 
