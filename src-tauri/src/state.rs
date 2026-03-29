@@ -32,6 +32,9 @@ pub struct AppState {
     pub llama_server: TokioRwLock<LlamaServerState>,
     /// Active model downloads, keyed by model_id, with cancellation token.
     pub active_downloads: TokioRwLock<HashMap<String, oneshot::Sender<()>>>,
+    /// Cached keychain verification state (true=verified, false=not verified, None=not checked yet)
+    /// Only request user input on first check or when verification fails
+    pub keychain_verified: RwLock<Option<bool>>,
 }
 
 impl AppState {
@@ -51,6 +54,7 @@ impl AppState {
             plugin_registry: RwLock::new(plugin_registry),
             llama_server: TokioRwLock::new(LlamaServerState::new()),
             active_downloads: TokioRwLock::new(HashMap::new()),
+            keychain_verified: RwLock::new(None), // Will be checked once on startup
         };
 
         // Initialize keychain (reads single store entry → at most 1 OS prompt)
@@ -193,8 +197,23 @@ impl AppState {
     /// - `Ok(true)` if keychain is verified and accessible
     /// - `Err(...)` if keychain verification fails (system password may have changed)
     pub fn check_keychain_verification(&self) -> Result<bool, String> {
+        // Check if we already verified in this app session
+        if let Ok(cache) = self.keychain_verified.read() {
+            if let Some(verified) = *cache {
+                // Use cached result (silent, no prompt)
+                return Ok(verified);
+            }
+        }
+
+        // First time check - may prompt user
+        eprintln!(">>> [KEYCHAIN] First check or cache miss, verifying...");
         match keychain::verify_accessible() {
             Ok(accessible) => {
+                // Cache the result for this session
+                if let Ok(mut cache) = self.keychain_verified.write() {
+                    *cache = Some(accessible);
+                }
+
                 if accessible {
                     // Keychain token is accessible - mark as verified
                     let _ = self.db.with_conn(|conn| {
@@ -209,6 +228,11 @@ impl AppState {
             }
             Err(e) => {
                 // Keychain verification failed - likely system password changed
+                eprintln!(">>> [KEYCHAIN] Verification failed: {}", e);
+                // Cache the failure too (so we don't keep prompting)
+                if let Ok(mut cache) = self.keychain_verified.write() {
+                    *cache = Some(false);
+                }
                 Err(format!("Keychain verification failed: {}", e))
             }
         }
