@@ -40,6 +40,18 @@ Download the latest release for your platform from [GitHub Releases](https://git
 | Linux | x86_64 | `.deb` / `.rpm` / `.AppImage` |
 | Linux | aarch64 | `.deb` / `.rpm` |
 
+### macOS GateKeeper Issue
+
+If you see an error like **"Termex is damaged and cannot be opened"** on macOS, run this command in Terminal:
+
+```bash
+xattr -cr /Applications/Termex.app
+```
+
+This removes the quarantine attribute that macOS adds to unsigned apps. After running this command, you can open Termex normally.
+
+> **Note:** A `fix-macos-gatekeeper.command` script is included in each release for convenience. You can download and run it instead of typing the command manually.
+
 ### Build from Source
 
 ```bash

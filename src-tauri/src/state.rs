@@ -178,4 +178,61 @@ impl AppState {
             Ok(())
         });
     }
+
+    /// Checks keychain verification state and detects system password changes.
+    ///
+    /// Returns:
+    /// - `Ok(false)` if keychain verification is not available (normal for Linux with Secret Service)
+    /// - `Ok(true)` if keychain is verified and accessible
+    /// - `Err(...)` if keychain verification fails (system password may have changed)
+    pub fn check_keychain_verification(&self) -> Result<bool, String> {
+        match keychain::verify_accessible() {
+            Ok(accessible) => {
+                if accessible {
+                    // Keychain token is accessible - mark as verified
+                    let _ = self.db.with_conn(|conn| {
+                        let now = chrono::Utc::now().to_rfc3339();
+                        conn.execute(
+                            "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)",
+                            rusqlite::params!["keychain_verified_at", now, now],
+                        )
+                    });
+                }
+                Ok(accessible)
+            }
+            Err(e) => {
+                // Keychain verification failed - likely system password changed
+                Err(format!("Keychain verification failed: {}", e))
+            }
+        }
+    }
+
+    /// Records the current app version in settings for upgrade detection.
+    pub fn update_app_version(&self, version: &str) {
+        let _ = self.db.with_conn(|conn| {
+            let now = chrono::Utc::now().to_rfc3339();
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)",
+                rusqlite::params!["app_version", version, now],
+            )
+        });
+    }
+
+    /// Checks if this is an application upgrade (for future use).
+    #[allow(dead_code)]
+    pub fn is_upgrade(&self, current_version: &str) -> Result<bool, String> {
+        self.db
+            .with_conn(|conn| {
+                match conn.query_row(
+                    "SELECT value FROM settings WHERE key = 'app_version'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                ) {
+                    Ok(last_version) => Ok(last_version != current_version),
+                    Err(rusqlite::Error::QueryReturnedNoRows) => Ok(true), // First run, consider it an upgrade
+                    Err(e) => Err(e),
+                }
+            })
+            .map_err(|e| e.to_string())
+    }
 }

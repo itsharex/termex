@@ -17,6 +17,8 @@ use thiserror::Error;
 const SERVICE_NAME: &str = "com.termex.app";
 /// Single keychain entry that holds all credentials as JSON.
 const STORE_KEY: &str = "__termex_store__";
+/// Verification token key used to detect OS keychain/system password changes.
+const VERIFICATION_TOKEN_KEY: &str = "__termex_verification__";
 
 #[derive(Debug, Error)]
 pub enum KeychainError {
@@ -37,10 +39,11 @@ fn cache() -> &'static RwLock<HashMap<String, String>> {
     CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-/// Initializes the keychain module.
+/// Initializes the keychain module and creates verification token on first launch.
 ///
 /// Reads all credentials from the single keychain entry into memory.
-/// On first launch, creates the entry. Returns whether keychain is available.
+/// On first launch, creates the entry and a verification token.
+/// Returns whether keychain is available.
 /// **Triggers at most 1 OS password prompt per app session.**
 pub fn init() -> bool {
     *AVAILABLE.get_or_init(|| {
@@ -59,12 +62,46 @@ pub fn init() -> bool {
                 true
             }
             Err(keyring::Error::NoEntry) => {
-                // First launch: create empty store
-                entry.set_password("{}").is_ok()
+                // First launch: create empty store and verification token
+                if entry.set_password("{}").is_ok() {
+                    // Create verification token for future password change detection
+                    let token = uuid::Uuid::new_v4().to_string();
+                    let _ = keyring::Entry::new(SERVICE_NAME, VERIFICATION_TOKEN_KEY)
+                        .and_then(|v_entry| v_entry.set_password(&token));
+                    return true;
+                }
+                false
             }
             Err(_) => false,
         }
     })
+}
+
+/// Verifies that the OS keychain is still accessible (detects system password changes).
+///
+/// Attempts to read a verification token from keychain. If this fails,
+/// it indicates either:
+/// 1. First launch (no token created yet)
+/// 2. System password has changed (token became inaccessible)
+///
+/// Returns `Ok(true)` if verification succeeds or token exists and is readable.
+/// Returns `Ok(false)` if token doesn't exist (first launch).
+/// Returns `Err(...)` if keychain is unavailable or access is denied (password changed).
+pub fn verify_accessible() -> Result<bool, KeychainError> {
+    if !is_available() {
+        return Err(KeychainError::NotAvailable("Keychain not available".to_string()));
+    }
+
+    let v_entry = keyring::Entry::new(SERVICE_NAME, VERIFICATION_TOKEN_KEY)
+        .map_err(|e| KeychainError::OperationFailed(e.to_string()))?;
+
+    match v_entry.get_password() {
+        Ok(_) => Ok(true), // Token exists and is accessible
+        Err(keyring::Error::NoEntry) => Ok(false), // No token (first launch)
+        Err(_) => Err(KeychainError::OperationFailed(
+            "Keychain verification failed - system password may have changed".to_string(),
+        )),
+    }
 }
 
 /// Returns whether the OS keychain is available. Calls `init()` lazily.

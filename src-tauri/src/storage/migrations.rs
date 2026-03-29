@@ -6,6 +6,7 @@ const MIGRATIONS: &[(i32, &str, &str)] = &[
     (1, "initial schema", MIGRATION_V1),
     (2, "ai provider max_tokens and temperature", ""),
     (3, "keychain credential storage", ""),
+    (4, "keychain verification tracking", ""),
 ];
 
 /// Runs all pending migrations in order.
@@ -41,6 +42,13 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
                 add_column_if_missing(conn, "servers", "password_keychain_id", "TEXT");
                 add_column_if_missing(conn, "servers", "passphrase_keychain_id", "TEXT");
                 add_column_if_missing(conn, "ai_providers", "api_key_keychain_id", "TEXT");
+            }
+            if version == 4 {
+                // Migration v4: keychain verification tracking
+                // No schema changes needed; settings are stored in the KV table
+                // Settings will be created on-demand:
+                // - keychain_verified_at: timestamp of last successful keychain verification
+                // - app_version: version from last run (for upgrade detection)
             }
             conn.execute(
                 "INSERT INTO _migrations (version, description, applied_at) VALUES (?1, ?2, ?3)",

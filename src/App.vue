@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { ElMessage } from "element-plus";
 import { tauriInvoke, tauriListen } from "@/utils/tauri";
 import { useServerStore } from "@/stores/serverStore";
 import { useSessionStore } from "@/stores/sessionStore";
@@ -32,6 +33,8 @@ const editServerId = ref<string | null>(null);
 const aiPanelVisible = ref(false);
 const updateDialogVisible = ref(false);
 const privacyDialogVisible = ref(false);
+const keychainVerificationVisible = ref(false);
+const keychainVerificationMessage = ref("");
 
 function openNewConnection() {
   editServerId.value = null;
@@ -53,6 +56,17 @@ async function insertToTerminal(command: string) {
     sessionId: sid,
     data: Array.from(bytes),
   }).catch(() => {});
+}
+
+async function handleKeychainVerify() {
+  try {
+    await tauriInvoke("keychain_verify", {});
+    keychainVerificationVisible.value = false;
+    keychainVerificationMessage.value = "";
+  } catch (e) {
+    // If verification fails, show error but allow user to continue
+    ElMessage.error(t('keychain.verification.failed'));
+  }
 }
 
 useShortcuts({
@@ -108,6 +122,10 @@ onMounted(async () => {
   }));
   unlisteners.push(await tauriListen("menu://privacy-policy", () => {
     privacyDialogVisible.value = true;
+  }));
+  unlisteners.push(await tauriListen<string>("keychain://verification_required", (message) => {
+    keychainVerificationMessage.value = message;
+    keychainVerificationVisible.value = true;
   }));
 
   // Auto-check for updates (once per day)
@@ -200,5 +218,28 @@ onBeforeUnmount(() => {
     <SettingsModal v-model:visible="settingsModalVisible" />
     <UpdateDialog v-if="updateDialogVisible" @close="updateDialogVisible = false" />
     <PrivacyDialog v-if="privacyDialogVisible" @close="privacyDialogVisible = false" />
+
+    <!-- Keychain Verification Dialog -->
+    <el-dialog
+      v-model="keychainVerificationVisible"
+      :title="t('keychain.verification.title')"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      width="400px"
+    >
+      <div>
+        <p class="mb-4" style="color: var(--tm-text-primary)">
+          {{ t('keychain.verification.message') }}
+        </p>
+        <p style="color: var(--tm-text-muted); font-size: 0.9em">
+          {{ keychainVerificationMessage }}
+        </p>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="handleKeychainVerify">
+          {{ t('keychain.verification.verify') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>

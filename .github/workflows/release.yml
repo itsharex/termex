@@ -30,7 +30,17 @@ jobs:
           RELEASE_ID=$(gh api repos/${{ github.repository }}/releases \
             -f tag_name="${{ github.ref_name }}" \
             -f name="Termex ${{ github.ref_name }}" \
-            -f body="See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details." \
+            -f body="See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+
+## macOS Users
+
+If you encounter **\"Termex is damaged and cannot be opened\"** error, run this in Terminal:
+
+\`\`\`bash
+xattr -cr /Applications/Termex.app
+\`\`\`
+
+Alternatively, download and run the \`fix-macos-gatekeeper.command\` script included in this release." \
             -F draft=false \
             -F prerelease=false \
             --jq '.id')
@@ -211,6 +221,30 @@ jobs:
                 ;;
               *.exe|*.exe.sig)
                 NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.exe/_win_x64.exe/')
+                ;;
+              *.deb|*.deb.sig)
+                # Detect architecture: amd64/x86_64 or arm64/aarch64
+                if [[ "$OLD_NAME" == *"amd64"* ]] || [[ "$OLD_NAME" == *"x86_64"* ]]; then
+                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/_amd64\.deb/_linux_x86_64.deb/; s/_x86_64\.deb/_linux_x86_64.deb/')
+                elif [[ "$OLD_NAME" == *"arm64"* ]] || [[ "$OLD_NAME" == *"aarch64"* ]]; then
+                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/_arm64\.deb/_linux_aarch64.deb/; s/_aarch64\.deb/_linux_aarch64.deb/')
+                fi
+                ;;
+              *.rpm|*.rpm.sig)
+                # Detect architecture: x86_64 or aarch64
+                if [[ "$OLD_NAME" == *"x86_64"* ]]; then
+                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.x86_64\.rpm/_linux_x86_64.rpm/')
+                elif [[ "$OLD_NAME" == *"aarch64"* ]]; then
+                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.aarch64\.rpm/_linux_aarch64.rpm/')
+                fi
+                ;;
+              *.AppImage|*.AppImage.sig)
+                # Detect architecture: amd64/x86_64 or arm64/aarch64
+                if [[ "$OLD_NAME" == *"amd64"* ]] || [[ "$OLD_NAME" == *"x86_64"* ]]; then
+                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/_amd64\.AppImage/_linux_x86_64.AppImage/; s/_x86_64\.AppImage/_linux_x86_64.AppImage/')
+                elif [[ "$OLD_NAME" == *"arm64"* ]] || [[ "$OLD_NAME" == *"aarch64"* ]]; then
+                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/_arm64\.AppImage/_linux_aarch64.AppImage/; s/_aarch64\.AppImage/_linux_aarch64.AppImage/')
+                fi
                 ;;
             esac
 

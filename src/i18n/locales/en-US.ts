@@ -212,4 +212,12 @@ export default {
     installLaunched: "Installer launched. Termex will close shortly.",
     newVersion: "New version available",
   },
+  keychain: {
+    verification: {
+      title: "Verify Credentials",
+      message: "Your system password may have changed. Please verify to access your saved credentials.",
+      verify: "Verify",
+      failed: "Verification failed. Some credentials may be temporarily inaccessible. You can still use Termex, but you may need to re-enter passwords.",
+    },
+  },
 };

@@ -10,7 +10,7 @@ pub mod storage;
 mod state;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 use state::AppState;
 
@@ -118,6 +118,26 @@ pub fn run() {
     tauri::Builder::default()
         .manage(app_state)
         .setup(|app| {
+            let app_handle = app.handle();
+            let state = app.state::<AppState>();
+
+            // Check keychain verification and detect system password changes
+            match state.check_keychain_verification() {
+                Ok(true) => {
+                    // Keychain verified - update app version for upgrade detection
+                    state.update_app_version(env!("CARGO_PKG_VERSION"));
+                }
+                Ok(false) => {
+                    // Keychain not available (e.g., headless Linux) - normal, continue
+                    state.update_app_version(env!("CARGO_PKG_VERSION"));
+                }
+                Err(e) => {
+                    // Keychain verification failed - likely system password changed
+                    // Emit event to frontend to show verification dialog
+                    let _ = app_handle.emit("keychain://verification_required", format!("Keychain access failed: {}", e));
+                }
+            }
+
             let menu = build_menu(app)?;
             app.set_menu(menu)?;
 
@@ -160,6 +180,7 @@ pub fn run() {
             commands::crypto::master_password_verify,
             commands::crypto::master_password_change,
             commands::crypto::master_password_lock,
+            commands::crypto::keychain_verify,
             // Server & group management
             commands::server::server_list,
             commands::server::server_create,

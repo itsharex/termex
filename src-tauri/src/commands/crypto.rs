@@ -133,6 +133,16 @@ pub fn master_password_lock(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+/// Verifies keychain access and handles system password changes.
+///
+/// Called by frontend when the app needs to verify that credentials are still accessible
+/// (e.g., after system password change detection). Returns `Ok(())` if verification succeeds.
+#[tauri::command]
+pub fn keychain_verify(state: State<'_, AppState>) -> Result<(), String> {
+    state.check_keychain_verification()?;
+    Ok(())
+}
+
 // ── Internal helpers ───────────────────────────────────────────
 
 /// Loads the stored salt and verification token from the settings table.
