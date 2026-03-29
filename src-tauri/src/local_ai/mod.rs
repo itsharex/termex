@@ -26,6 +26,37 @@ pub struct LlamaServerState {
     pub loaded_model: Option<String>,
 }
 
+impl Default for LlamaServerState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for LlamaServerState {
+    fn drop(&mut self) {
+        // Clean up the llama-server process when AppState is dropped
+        if let Some(pid) = self.process_id {
+            eprintln!(">>> [MOD] Cleaning up llama-server process (PID: {}) on app shutdown", pid);
+            #[cfg(target_os = "windows")]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .arg("/PID")
+                    .arg(pid.to_string())
+                    .arg("/F")
+                    .output();
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = std::process::Command::new("kill")
+                    .arg("-9")
+                    .arg(pid.to_string())
+                    .output();
+            }
+        }
+    }
+}
+
 impl LlamaServerState {
     /// Creates a new, uninitialized LlamaServerState.
     pub fn new() -> Self {

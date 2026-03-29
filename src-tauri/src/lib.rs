@@ -118,6 +118,25 @@ pub fn run() {
         .format_timestamp_millis()
         .init();
 
+    // Clean up any leftover llama-server processes from previous app runs
+    // This ensures we start with a clean state
+    eprintln!(">>> [INIT] Cleaning up any leftover llama-server processes...");
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("pkill")
+            .arg("-f")
+            .arg("llama-server")
+            .output();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .arg("/F")
+            .arg("/IM")
+            .arg("llama-server.exe")
+            .output();
+    }
+
     // MVP: no master password — database is unencrypted.
     // When user sets a master password, it encrypts credential fields via AES-256-GCM.
     let app_state = AppState::new(None).expect("failed to initialize database");
