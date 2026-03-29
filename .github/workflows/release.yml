@@ -27,20 +27,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          read -r -d '' RELEASE_BODY << 'BODY' || true
+          See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+
+          ## macOS Users
+
+          If you encounter **"Termex is damaged and cannot be opened"** error, run this in Terminal:
+
+          ```bash
+          xattr -cr /Applications/Termex.app
+          ```
+
+          Alternatively, download and run the `fix-macos-gatekeeper.command` script included in this release.
+          BODY
+
           RELEASE_ID=$(gh api repos/${{ github.repository }}/releases \
             -f tag_name="${{ github.ref_name }}" \
             -f name="Termex ${{ github.ref_name }}" \
-            -f body="See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
-
-## macOS Users
-
-If you encounter **\"Termex is damaged and cannot be opened\"** error, run this in Terminal:
-
-\`\`\`bash
-xattr -cr /Applications/Termex.app
-\`\`\`
-
-Alternatively, download and run the \`fix-macos-gatekeeper.command\` script included in this release." \
+            -f body="$RELEASE_BODY" \
             -F draft=false \
             -F prerelease=false \
             --jq '.id')
