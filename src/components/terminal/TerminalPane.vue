@@ -2,12 +2,14 @@
 import { ref, computed, onMounted, watch, toRef, nextTick } from "vue";
 import { useTerminal } from "@/composables/useTerminal";
 import { useSessionStore } from "@/stores/sessionStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 const props = defineProps<{
   sessionId: string;
 }>();
 
 const sessionStore = useSessionStore();
+const settingsStore = useSettingsStore();
 const containerRef = ref<HTMLElement>();
 const sessionIdRef = toRef(props, "sessionId");
 
@@ -15,7 +17,7 @@ const isPlaceholder = computed(() => props.sessionId.startsWith("connecting-"));
 const session = computed(() => sessionStore.sessions.get(props.sessionId));
 const isActive = computed(() => sessionStore.activeSessionId === props.sessionId);
 
-const { mount, fit, dispose } = useTerminal(sessionIdRef);
+const { mount, fit, setTheme, dispose } = useTerminal(sessionIdRef);
 
 onMounted(() => {
   if (containerRef.value && !isPlaceholder.value) {
@@ -39,6 +41,13 @@ watch(isActive, async (active) => {
   if (active && !isPlaceholder.value) {
     await nextTick();
     fit();
+  }
+});
+
+// Update terminal theme when appearance setting changes
+watch(() => settingsStore.theme, () => {
+  if (!isPlaceholder.value) {
+    setTheme();
   }
 });
 

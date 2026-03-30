@@ -126,6 +126,13 @@ export function useTerminal(sessionId: Ref<string>) {
     requestAnimationFrame(() => terminal?.focus());
   }
 
+  /** Updates the terminal theme. */
+  function setTheme() {
+    if (terminal) {
+      terminal.options.theme = getTerminalTheme();
+    }
+  }
+
   /** Cleans up all resources. */
   function dispose() {
     unlistenData?.();
@@ -144,5 +151,5 @@ export function useTerminal(sessionId: Ref<string>) {
 
   onUnmounted(dispose);
 
-  return { terminalRef, mount, getDimensions, fit, dispose };
+  return { terminalRef, mount, getDimensions, fit, setTheme, dispose };
 }
