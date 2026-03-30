@@ -46,6 +46,22 @@ export const useServerStore = defineStore("server", () => {
     servers.value.filter((s) => !s.groupId),
   );
 
+  /** Reference count for each bastion server (how many servers use it as proxy). */
+  const proxyRefCounts = computed(() => {
+    const counts = new Map<string, number>();
+    for (const s of servers.value) {
+      if (s.proxyId) {
+        counts.set(s.proxyId, (counts.get(s.proxyId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  });
+
+  /** Quick lookup map from server ID to server object. */
+  const serverById = computed(() => {
+    return new Map(servers.value.map((s) => [s.id, s]));
+  });
+
   // ── Actions ────────────────────────────────────────────────
 
   async function fetchAll() {
@@ -137,6 +153,8 @@ export const useServerStore = defineStore("server", () => {
     filteredServers,
     groupTree,
     ungroupedServers,
+    proxyRefCounts,
+    serverById,
     // Actions
     fetchAll,
     createServer,

@@ -16,6 +16,11 @@ pub struct SshSession {
     handle: client::Handle<ClientHandler>,
     /// The active shell channel (set after `open_shell`).
     channel: Option<ChannelHandle>,
+    /// List of bastion server IDs this session depends on (proxy_chain).
+    /// Used for reference counting cleanup when session disconnects.
+    /// Empty for direct connections, contains [bastion_id] for single-hop,
+    /// [innermost_bastion, ..., outermost_bastion] for multi-hop.
+    pub proxy_chain: Vec<String>,
 }
 
 impl SshSession {
@@ -35,6 +40,40 @@ impl SshSession {
         Ok(Self {
             handle,
             channel: None,
+            proxy_chain: Vec::new(),
+        })
+    }
+
+    /// Connects to an SSH server via a bastion host using direct-tcpip tunneling.
+    /// The bastion handle must already be authenticated.
+    pub async fn connect_via_proxy(
+        bastion_handle: &client::Handle<ClientHandler>,
+        target_host: &str,
+        target_port: u16,
+    ) -> Result<Self, SshError> {
+        // Open direct-tcpip channel through bastion to target
+        let channel = bastion_handle
+            .channel_open_direct_tcpip(target_host, target_port as u32, "127.0.0.1", 0)
+            .await
+            .map_err(|e| SshError::ChannelError(format!("Failed to open direct-tcpip channel: {}", e)))?;
+
+        // Extract the channel as a stream and establish SSH connection
+        let stream = channel.into_stream();
+        let config = Arc::new(client::Config {
+            inactivity_timeout: Some(std::time::Duration::from_secs(3600)),
+            keepalive_interval: Some(std::time::Duration::from_secs(30)),
+            ..Default::default()
+        });
+
+        let handler = ClientHandler;
+        let handle = client::connect_stream(config, stream, handler)
+            .await
+            .map_err(|e| SshError::ConnectionFailed(format!("Failed to connect through proxy: {}", e)))?;
+
+        Ok(Self {
+            handle,
+            channel: None,
+            proxy_chain: Vec::new(),
         })
     }
 
@@ -102,7 +141,8 @@ impl SshSession {
     }
 
     /// Disconnects the SSH session and cleans up resources.
-    pub async fn disconnect(mut self) -> Result<(), SshError> {
+    /// Returns the proxy_chain so the caller can decrement reference counts.
+    pub async fn disconnect(mut self) -> Result<Vec<String>, SshError> {
         // 1. Close the shell channel first
         if let Some(ch) = self.channel.take() {
             let _ = ch.cmd_tx.send(ChannelCommand::Close);
@@ -118,7 +158,7 @@ impl SshSession {
         let _ = self.handle
             .disconnect(russh::Disconnect::ByApplication, "", "en")
             .await;
-        // 3. handle is dropped here, closing the TCP connection
-        Ok(())
+        // 3. Return proxy_chain for reference count cleanup
+        Ok(self.proxy_chain)
     }
 }

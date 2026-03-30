@@ -12,6 +12,16 @@ use crate::ssh::forward::ForwardRegistry;
 use crate::ssh::session::SshSession;
 use crate::storage::Database;
 
+/// Entry in the proxy session pool (bastion/jump host).
+/// Stores the authenticated SSH session and reference count for lifecycle management.
+pub struct ProxyEntry {
+    /// Authenticated SSH session to the bastion/proxy server (no shell channel opened)
+    /// Used for direct-tcpip tunnel creation to inner targets
+    pub session: Box<SshSession>,
+    /// Number of inner sessions currently using this proxy
+    pub ref_count: usize,
+}
+
 /// Global application state shared across all Tauri commands.
 pub struct AppState {
     /// SQLCipher encrypted database connection.
@@ -35,6 +45,9 @@ pub struct AppState {
     /// Cached keychain verification state (true=verified, false=not verified, None=not checked yet)
     /// Only request user input on first check or when verification fails
     pub keychain_verified: RwLock<Option<bool>>,
+    /// Proxy session pool for bastion/jump hosts, keyed by bastion server_id
+    /// Multiple inner sessions can share the same bastion connection via reference counting
+    pub proxy_sessions: TokioRwLock<HashMap<String, ProxyEntry>>,
 }
 
 impl AppState {
@@ -55,6 +68,7 @@ impl AppState {
             llama_server: TokioRwLock::new(LlamaServerState::new()),
             active_downloads: TokioRwLock::new(HashMap::new()),
             keychain_verified: RwLock::new(None), // Will be checked once on startup
+            proxy_sessions: TokioRwLock::new(HashMap::new()), // ProxyJump bastion pool
         };
 
         // Initialize keychain (reads single store entry → at most 1 OS prompt)

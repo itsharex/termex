@@ -267,15 +267,24 @@ pub fn server_update(
 }
 
 /// Deletes a server by ID and removes its keychain credentials.
+/// Also cleans up any proxy_id references to this server.
 #[tauri::command]
 pub fn server_delete(state: State<'_, AppState>, id: String) -> Result<(), String> {
     // Clean up keychain entries
     let _ = keychain::delete(&keychain::ssh_password_key(&id));
     let _ = keychain::delete(&keychain::ssh_passphrase_key(&id));
 
+    let now = chrono::Utc::now().to_rfc3339();
+
     state
         .db
         .with_conn(|conn| {
+            // Clear proxy_id references to this server (servers using it as bastion)
+            conn.execute(
+                "UPDATE servers SET proxy_id = NULL, updated_at = ?1 WHERE proxy_id = ?2",
+                rusqlite::params![now, id],
+            )?;
+            // Delete the server itself
             conn.execute("DELETE FROM servers WHERE id = ?1", rusqlite::params![id])?;
             Ok(())
         })

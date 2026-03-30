@@ -226,6 +226,16 @@ export const useSftpStore = defineStore("sftp", () => {
         item.transferred = progress.transferred;
         item.total = progress.total;
         item.done = progress.done;
+
+        // Auto-remove completed transfer after 2 seconds
+        if (progress.done) {
+          setTimeout(() => {
+            const idx = transfers.value.findIndex((t) => t.id === transferId);
+            if (idx !== -1) {
+              transfers.value.splice(idx, 1);
+            }
+          }, 2000);
+        }
       }
     }).then((unlisten) => unlistenFns.push(unlisten));
   }

@@ -2,7 +2,7 @@
 import { ref, computed, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessageBox } from "element-plus";
-import { Monitor } from "@element-plus/icons-vue";
+import { Monitor, ArrowRight } from "@element-plus/icons-vue";
 import { useServerStore } from "@/stores/serverStore";
 import type { Server, ServerInput } from "@/types/server";
 import ContextMenu from "./ContextMenu.vue";
@@ -29,6 +29,7 @@ function toInput(overrides: Partial<ServerInput> = {}): ServerInput {
     authType: props.server.authType,
     keyPath: props.server.keyPath,
     groupId: props.server.groupId,
+    proxyId: (props.server.proxyId || null) as string | null,
     startupCmd: props.server.startupCmd,
     tags: [...props.server.tags],
     ...overrides,
@@ -119,6 +120,37 @@ const ctxItems = computed<MenuItem[]>(() => {
   });
 
   return items;
+});
+
+// Bastion badges
+const isBastionHost = computed(() => {
+  return serverStore.proxyRefCounts.has(props.server.id);
+});
+
+const bastionRefCount = computed(() => {
+  return serverStore.proxyRefCounts.get(props.server.id) ?? 0;
+});
+
+const bastionTooltip = computed(() => {
+  return t("sidebar.bastionUsedBy", { count: bastionRefCount.value });
+});
+
+const bastionChainPreview = computed(() => {
+  if (!props.server.proxyId) return null;
+
+  const chain: string[] = [];
+  let current_id: string | null | undefined = props.server.proxyId;
+  const visited = new Set<string>();
+
+  while (current_id && !visited.has(current_id)) {
+    visited.add(current_id);
+    const s = serverStore.serverById.get(current_id);
+    if (!s) break;
+    chain.push(s.name);
+    current_id = s.proxyId;
+  }
+
+  return chain.length > 0 ? chain.join(" → ") : null;
 });
 
 function onContextMenu(e: MouseEvent) {
@@ -224,7 +256,29 @@ function handleDblClick() {
       @click.stop
       @dblclick.stop
     />
-    <span v-else class="truncate">{{ server.name }}</span>
+    <span v-else class="flex-1 min-w-0 flex items-center gap-2">
+      <span class="truncate">{{ server.name }}</span>
+      <!-- Method B: Arrow icon for servers with proxy (has bastion) -->
+      <el-icon
+        v-if="server.proxyId"
+        :size="8"
+        class="shrink-0"
+        style="color: var(--tm-text-muted)"
+        :title="'Via: ' + bastionChainPreview"
+      >
+        <ArrowRight />
+      </el-icon>
+    </span>
+
+    <!-- Method A: Badge for bastion servers (amber badge + ref count) -->
+    <div
+      v-if="isBastionHost && bastionRefCount > 0"
+      class="ml-auto shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium"
+      style="background: rgb(217 119 6 / 0.15); color: rgb(217 119 6);"
+      :title="bastionTooltip"
+    >
+      ⇄ {{ bastionRefCount }}
+    </div>
   </div>
 
   <!-- Cursor tooltip -->

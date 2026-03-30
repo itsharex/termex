@@ -27,6 +27,7 @@ const dialogVisible = computed({
 const loading = ref(false);
 const testing = ref(false);
 const testResult = ref<{ ok: boolean; msg: string } | null>(null);
+const activeTab = ref("authorization");
 
 const form = reactive<ServerInput>({
   name: "",
@@ -38,6 +39,7 @@ const form = reactive<ServerInput>({
   keyPath: "",
   passphrase: "",
   groupId: null,
+  proxyId: null,
   startupCmd: "",
   tags: [],
 });
@@ -45,6 +47,42 @@ const form = reactive<ServerInput>({
 const title = computed(() =>
   props.editId ? t("connection.name") : t("sidebar.newConnection"),
 );
+
+// Compute available bastion servers (exclude self and circular references)
+const availableBastions = computed(() => {
+  const current_id = props.editId;
+  const servers = serverStore.servers.filter(s => s.id !== current_id);
+
+  return servers.filter(s => {
+    // Check if selecting this server would create a circular reference
+    let proxy_id = s.proxyId;
+    const visited = new Set<string | undefined>();
+    while (proxy_id) {
+      if (proxy_id === current_id) return false; // Would create circular reference
+      if (visited.has(proxy_id)) return false; // Would create a loop
+      visited.add(proxy_id);
+      const next = serverStore.servers.find(srv => srv.id === proxy_id);
+      proxy_id = next?.proxyId;
+    }
+    return true;
+  });
+});
+
+// Compute connection chain preview
+const connectionChainPreview = computed(() => {
+  if (!form.proxyId) return null;
+
+  const chain: string[] = [];
+  let current_id: string | null | undefined = form.proxyId;
+  while (current_id) {
+    const server = serverStore.servers.find(s => s.id === current_id);
+    if (!server) break;
+    chain.push(server.name);
+    current_id = server.proxyId;
+  }
+  chain.push(form.host || "target");
+  return chain;
+});
 
 // Reset form when dialog opens
 watch(
@@ -69,9 +107,11 @@ function resetForm() {
   form.keyPath = "";
   form.passphrase = "";
   form.groupId = null;
+  form.proxyId = null;
   form.startupCmd = "";
   form.tags = [];
   testResult.value = null;
+  activeTab.value = "authorization";
 }
 
 async function loadServer(id: string) {
@@ -84,6 +124,7 @@ async function loadServer(id: string) {
   form.authType = server.authType;
   form.keyPath = server.keyPath ?? "";
   form.groupId = server.groupId;
+  form.proxyId = (server.proxyId || null) as string | null;
   form.startupCmd = server.startupCmd ?? "";
   form.tags = [...server.tags];
 
@@ -194,89 +235,136 @@ async function handleTest() {
   <el-dialog
     v-model="dialogVisible"
     :title="title"
-    width="480px"
+    width="520px"
     :close-on-click-modal="true"
     :close-on-press-escape="true"
     destroy-on-close
     class="connect-dialog"
   >
-    <el-form label-position="top" size="default">
-      <el-form-item :label="t('connection.name')">
-        <el-input
-          v-model="form.name"
-          :placeholder="`${form.username || 'user'}@${form.host || 'hostname'}`"
-        />
-      </el-form-item>
+    <!-- Tabs at top -->
+    <el-tabs v-model="activeTab" class="mb-0">
+      <!-- Tab 1: Authorization Info -->
+      <el-tab-pane name="authorization" :label="t('connection.authorizationInfo')">
+        <el-form label-position="top" size="default">
+          <!-- Fixed area within tab: name, host+port, username -->
+          <el-form-item :label="t('connection.name')">
+            <el-input
+              v-model="form.name"
+              :placeholder="`${form.username || 'user'}@${form.host || 'hostname'}`"
+            />
+          </el-form-item>
 
-      <div class="flex gap-3">
-        <el-form-item :label="t('connection.host')" class="flex-1" required>
-          <el-input v-model="form.host" placeholder="192.168.1.1" />
-        </el-form-item>
-        <el-form-item :label="t('connection.port')" class="w-24">
-          <el-input-number v-model="form.port" :min="1" :max="65535" controls-position="right" />
-        </el-form-item>
-      </div>
+          <div class="flex gap-3">
+            <el-form-item :label="t('connection.host')" class="flex-1" required>
+              <el-input v-model="form.host" placeholder="192.168.1.1" />
+            </el-form-item>
+            <el-form-item :label="t('connection.port')" class="w-24">
+              <el-input-number v-model="form.port" :min="1" :max="65535" controls-position="right" />
+            </el-form-item>
+          </div>
 
-      <el-form-item :label="t('connection.username')" required>
-        <el-input v-model="form.username" placeholder="root" />
-      </el-form-item>
+          <el-form-item :label="t('connection.username')" required>
+            <el-input v-model="form.username" placeholder="root" />
+          </el-form-item>
 
-      <el-form-item :label="t('connection.authType')">
-        <el-radio-group v-model="form.authType">
-          <el-radio-button value="password">{{ t("connection.password") }}</el-radio-button>
-          <el-radio-button value="key">{{ t("connection.privateKey") }}</el-radio-button>
-        </el-radio-group>
-      </el-form-item>
+          <el-divider style="margin: 12px 0;" />
 
-      <el-form-item v-if="form.authType === 'password'" :label="t('connection.password')">
-        <el-input v-model="form.password" type="password" show-password />
-      </el-form-item>
+          <el-form-item :label="t('connection.authType')">
+            <el-radio-group v-model="form.authType">
+              <el-radio-button value="password">{{ t("connection.password") }}</el-radio-button>
+              <el-radio-button value="key">{{ t("connection.privateKey") }}</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
 
-      <template v-if="form.authType === 'key'">
-        <el-form-item>
-          <template #label>
-            <div class="flex items-center justify-between w-full">
-              <span>{{ t('connection.privateKey') }}</span>
-              <button
-                type="button"
-                class="ml-3 text-[11px] text-primary-400 hover:text-primary-300 transition-colors"
-                @click="browseKeyFile"
-              >
-                {{ t('connection.browseKey') }}
-              </button>
-              <input
-                ref="fileInputRef"
-                type="file"
-                accept=".pem,.key,.pub,.ppk,*"
-                class="hidden"
-                @change="onKeyFileSelected"
+          <el-form-item v-if="form.authType === 'password'" :label="t('connection.password')">
+            <el-input v-model="form.password" type="password" show-password />
+          </el-form-item>
+
+          <template v-if="form.authType === 'key'">
+            <el-form-item>
+              <template #label>
+                <div class="flex items-center justify-between w-full">
+                  <span>{{ t('connection.privateKey') }}</span>
+                  <button
+                    type="button"
+                    class="ml-3 text-[11px] text-primary-400 hover:text-primary-300 transition-colors"
+                    @click="browseKeyFile"
+                  >
+                    {{ t('connection.browseKey') }}
+                  </button>
+                  <input
+                    ref="fileInputRef"
+                    type="file"
+                    accept=".pem,.key,.pub,.ppk,*"
+                    class="hidden"
+                    @change="onKeyFileSelected"
+                  />
+                </div>
+              </template>
+              <el-input
+                v-model="form.keyPath"
+                type="textarea"
+                :rows="4"
+                placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"
+                resize="none"
               />
-            </div>
+            </el-form-item>
+            <el-form-item label="Passphrase">
+              <el-input v-model="form.passphrase" type="password" show-password />
+            </el-form-item>
           </template>
-          <el-input
-            v-model="form.keyPath"
-            type="textarea"
-            :rows="4"
-            placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"
-            resize="none"
-          />
-        </el-form-item>
-        <el-form-item label="Passphrase">
-          <el-input v-model="form.passphrase" type="password" show-password />
-        </el-form-item>
-      </template>
 
-      <el-form-item :label="t('connection.group')">
-        <el-select v-model="form.groupId" clearable class="w-full">
-          <el-option
-            v-for="group in serverStore.groups"
-            :key="group.id"
-            :label="group.name"
-            :value="group.id"
-          />
-        </el-select>
-      </el-form-item>
-    </el-form>
+          <el-form-item :label="t('connection.group')">
+            <el-select v-model="form.groupId" clearable class="w-full">
+              <el-option
+                v-for="group in serverStore.groups"
+                :key="group.id"
+                :label="group.name"
+                :value="group.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-form>
+      </el-tab-pane>
+
+      <!-- Tab 2: SSH Tunnel -->
+      <el-tab-pane name="tunnel" :label="t('connection.sshTunnel')">
+        <el-form label-position="top" size="default">
+          <el-form-item :label="t('connection.bastion')">
+            <el-select
+              v-model="form.proxyId"
+              clearable
+              filterable
+              :placeholder="t('connection.selectBastion')"
+              class="w-full"
+            >
+              <el-option
+                v-for="server in availableBastions"
+                :key="server.id"
+                :label="`${server.name} (${server.host}:${server.port})`"
+                :value="server.id"
+              />
+            </el-select>
+          </el-form-item>
+
+          <!-- Connection chain preview -->
+          <div
+            class="px-3 py-2 rounded text-xs"
+            style="background: var(--tm-bg-hover)"
+          >
+            <div v-if="connectionChainPreview" class="space-y-1">
+              <div class="text-secondary font-semibold mb-1">{{ t('connection.connectionPath') }}:</div>
+              <div class="text-primary">
+                {{ connectionChainPreview.join(' ➜ ') }}
+              </div>
+            </div>
+            <div v-else class="text-secondary">
+              {{ t('connection.noProxyConfigured') }}
+            </div>
+          </div>
+        </el-form>
+      </el-tab-pane>
+    </el-tabs>
 
     <template #footer>
       <div>
