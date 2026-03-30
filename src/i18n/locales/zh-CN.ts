@@ -122,6 +122,8 @@ export default {
     newFilePrompt: "请输入文件名",
     selectAllTodo: "多选功能即将上线",
     editTodo: "文件编辑功能即将上线",
+    preparing: "准备中",
+    remove: "移除",
     error: "错误",
   },
   ai: {

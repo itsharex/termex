@@ -122,6 +122,8 @@ export default {
     newFilePrompt: "Enter file name",
     selectAllTodo: "Multi-select coming soon",
     editTodo: "File editing coming soon",
+    preparing: "Preparing",
+    remove: "Remove",
     error: "Error",
   },
   ai: {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import { useSftpStore } from "@/stores/sftpStore";
-import { Upload, Download } from "@element-plus/icons-vue";
+import { Upload, Download, Close } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 
 const { t } = useI18n();
@@ -16,7 +16,7 @@ function formatBytes(bytes: number): string {
 
 function getStatusText(item: any): string {
   if (item.done) return t("sftp.completed");
-  if (item.total === 0) return t("sftp.connecting");
+  if (item.total === 0) return t("sftp.preparing");
   return `${Math.round((item.transferred / item.total) * 100)}%`;
 }
 
@@ -24,6 +24,13 @@ function handleClear() {
   // Remove all completed transfers
   sftpStore.transfers = sftpStore.transfers.filter((t) => !t.done);
   ElMessage.success(t("sftp.cleared"));
+}
+
+function handleRemoveTransfer(id: string) {
+  const idx = sftpStore.transfers.findIndex((t) => t.id === id);
+  if (idx !== -1) {
+    sftpStore.transfers.splice(idx, 1);
+  }
 }
 </script>
 
@@ -68,14 +75,26 @@ function handleClear() {
               {{ item.direction === "upload" ? item.localPath : item.localPath }}
             </div>
           </div>
-          <div class="text-right">
-            <div class="text-xs font-medium" :style="{ color: item.done ? '#10b981' : 'var(--tm-text-secondary)' }">
-              {{ getStatusText(item) }}
+          <div class="text-right flex items-center gap-2">
+            <div>
+              <div class="text-xs font-medium" :style="{ color: item.done ? '#10b981' : 'var(--tm-text-secondary)' }">
+                {{ getStatusText(item) }}
+              </div>
+              <div class="text-[10px]" style="color: var(--tm-text-muted)">
+                {{ formatBytes(item.transferred) }}
+                <span v-if="item.total > 0"> / {{ formatBytes(item.total) }}</span>
+              </div>
             </div>
-            <div class="text-[10px]" style="color: var(--tm-text-muted)">
-              {{ formatBytes(item.transferred) }}
-              <span v-if="item.total > 0"> / {{ formatBytes(item.total) }}</span>
-            </div>
+            <!-- Delete button -->
+            <button
+              class="text-xs p-1 rounded hover:bg-white/10 transition-colors flex-shrink-0"
+              :title="t('sftp.remove')"
+              @click="handleRemoveTransfer(item.id)"
+            >
+              <el-icon :size="12" style="color: var(--tm-text-muted)">
+                <Close />
+              </el-icon>
+            </button>
           </div>
         </div>
 
