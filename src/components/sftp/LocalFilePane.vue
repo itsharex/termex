@@ -17,6 +17,18 @@ interface LocalEntry {
   size: number;
 }
 
+// Normalize path by removing double slashes
+function normalizePath(path: string): string {
+  if (!path) return "/";
+  // Remove multiple consecutive slashes
+  let normalized = path.replace(/\/+/g, "/");
+  // Ensure single leading slash for absolute paths
+  if (!normalized.startsWith("/")) {
+    normalized = "/" + normalized;
+  }
+  return normalized;
+}
+
 const currentPath = ref("");
 const entries = ref<LocalEntry[]>([]);
 const loading = ref(false);
@@ -33,8 +45,9 @@ const selectedEntry = ref<LocalEntry | null>(null);
 onMounted(async () => {
   try {
     const home = await tauriInvoke<string>("local_home_dir");
-    currentPath.value = home;
-    await listDir(home);
+    const normalizedHome = normalizePath(home);
+    currentPath.value = normalizedHome;
+    await listDir(normalizedHome);
   } catch {
     currentPath.value = "/";
     await listDir("/");
@@ -49,9 +62,10 @@ watch(currentPath, (newPath) => {
 async function listDir(path: string) {
   loading.value = true;
   try {
-    const result = await tauriInvoke<LocalEntry[]>("local_list_dir", { path });
+    const normalizedPath = normalizePath(path);
+    const result = await tauriInvoke<LocalEntry[]>("local_list_dir", { path: normalizedPath });
     entries.value = result;
-    currentPath.value = path;
+    currentPath.value = normalizedPath;
   } catch {
     entries.value = [];
   } finally {
@@ -60,14 +74,16 @@ async function listDir(path: string) {
 }
 
 async function enterDir(name: string) {
-  const sep = currentPath.value.endsWith("/") ? "" : "/";
-  await listDir(`${currentPath.value}${sep}${name}`);
+  const basePath = currentPath.value === "/" ? "" : currentPath.value;
+  const newPath = `${basePath}/${name}`;
+  await listDir(newPath);
 }
 
 async function goUp() {
-  const parts = currentPath.value.replace(/\/+$/, "").split("/");
+  if (currentPath.value === "/") return;
+  const parts = currentPath.value.split("/").filter(Boolean);
   parts.pop();
-  const parent = parts.join("/") || "/";
+  const parent = parts.length === 0 ? "/" : "/" + parts.join("/");
   await listDir(parent);
 }
 
