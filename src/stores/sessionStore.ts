@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { tauriInvoke } from "@/utils/tauri";
+import { useSftpStore } from "./sftpStore";
 import type { Session, SessionStatus, Tab } from "@/types/session";
 
 export const useSessionStore = defineStore("session", () => {
@@ -96,6 +97,13 @@ export const useSessionStore = defineStore("session", () => {
       closeTab(sessionId);
       return;
     }
+
+    // Close SFTP if this SSH session has SFTP open
+    const sftpStore = useSftpStore();
+    if (sftpStore.sessionId === sessionId && sftpStore.isConnected) {
+      await sftpStore.close();
+    }
+
     try {
       await tauriInvoke("ssh_disconnect", { sessionId });
     } catch {
