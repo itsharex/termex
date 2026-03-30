@@ -2,7 +2,7 @@
 import { ref, computed, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessageBox } from "element-plus";
-import { Monitor, ArrowRight } from "@element-plus/icons-vue";
+import { Monitor } from "@element-plus/icons-vue";
 import { useServerStore } from "@/stores/serverStore";
 import type { Server, ServerInput } from "@/types/server";
 import ContextMenu from "./ContextMenu.vue";
@@ -257,17 +257,16 @@ function handleDblClick() {
       @dblclick.stop
     />
     <span v-else class="flex-1 min-w-0 flex items-center gap-2">
-      <span class="truncate">{{ server.name }}</span>
-      <!-- Method B: Arrow icon for servers with proxy (has bastion) -->
-      <el-icon
+      <!-- Tunnel indicator for servers with proxy (has bastion) -->
+      <span
         v-if="server.proxyId"
-        :size="8"
-        class="shrink-0"
+        class="shrink-0 text-[10px] font-medium"
         style="color: var(--tm-text-muted)"
         :title="'Via: ' + bastionChainPreview"
       >
-        <ArrowRight />
-      </el-icon>
+        [>>>]
+      </span>
+      <span class="truncate">{{ server.name }}</span>
     </span>
 
     <!-- Method A: Badge for bastion servers (amber badge + ref count) -->
