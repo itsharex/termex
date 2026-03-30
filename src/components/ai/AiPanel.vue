@@ -24,6 +24,10 @@ function clearMessages() {
   aiStore.messages = [];
 }
 
+function handleStartLocalAi() {
+  emit("open-settings");
+}
+
 onMounted(() => {
   aiStore.loadProviders();
 });
@@ -91,6 +95,6 @@ onMounted(() => {
     </div>
 
     <!-- Input -->
-    <AiInput :disabled="!hasProvider" />
+    <AiInput :disabled="!hasProvider" @start-local-ai="handleStartLocalAi" />
   </div>
 </template>

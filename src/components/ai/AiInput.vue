@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { ElMessage } from "element-plus";
 import { useAiStore } from "@/stores/aiStore";
 import { tauriInvoke, tauriListen } from "@/utils/tauri";
 
@@ -13,6 +14,10 @@ const props = defineProps<{
 
 const input = ref("");
 const loading = ref(false);
+
+const emit = defineEmits<{
+  (e: "start-local-ai"): void;
+}>();
 
 async function handleSubmit() {
   const text = input.value.trim();
@@ -54,12 +59,23 @@ async function handleSubmit() {
 
     unlisten();
   } catch (err) {
-    aiStore.messages.push({
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: String(err),
-      timestamp: new Date().toISOString(),
-    });
+    const errMsg = String(err);
+
+    // Handle local AI engine not running
+    if (errMsg.includes("Local AI engine is not running")) {
+      ElMessage.warning({
+        message: "Local AI engine is not running. Start it from Local AI Models settings.",
+        duration: 5000,
+      });
+      emit("start-local-ai");
+    } else {
+      aiStore.messages.push({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: errMsg,
+        timestamp: new Date().toISOString(),
+      });
+    }
     loading.value = false;
   }
 }
