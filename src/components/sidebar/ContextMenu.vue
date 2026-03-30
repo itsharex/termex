@@ -166,70 +166,74 @@ onBeforeUnmount(() => {
       :style="menuStyle"
     >
       <template v-for="item in items" :key="item.action">
+        <!-- Divider line only -->
         <div v-if="item.divided" class="my-1 border-t border-white/10" />
 
-        <!-- Item with submenu -->
-        <div
-          v-if="item.children"
-          class="relative"
-          @mouseenter="openSub = item.action"
-          @mouseleave="openSub = null"
-        >
-          <button
-            class="w-full text-left px-2 py-1.5 hover:bg-white/10 transition-colors flex items-center justify-between gap-2"
-          >
-            <div class="flex items-center gap-2 flex-1">
-              <el-icon v-if="item.icon" :size="12" class="flex-shrink-0">
-                <component :is="getIcon(item.action)" />
-              </el-icon>
-              <span>{{ item.label }}</span>
-            </div>
-            <span class="ml-2 text-gray-500">&#x25B8;</span>
-          </button>
-          <!-- Submenu with smart positioning -->
+        <!-- Menu items (skip if divider) -->
+        <template v-else>
+          <!-- Item with submenu -->
           <div
-            v-if="openSub === item.action"
-            :ref="(el) => { if (el) subMenuRefs[item.action] = el as HTMLDivElement; }"
-            class="absolute py-1 rounded-md shadow-xl"
-            :class="[
-              shouldSubMenuGoLeft(item.action)
-                ? 'right-full mr-0.5'
-                : 'left-full ml-0.5'
-            ]"
-            :style="{
-              ...getSubMenuStyle(item.action, 0),
-              background: 'var(--tm-bg-elevated)',
-              border: '1px solid var(--tm-border)',
-              minWidth: '140px'
-            }"
+            v-if="item.children"
+            class="relative"
+            @mouseenter="openSub = item.action"
+            @mouseleave="openSub = null"
           >
             <button
-              v-for="child in item.children"
-              :key="child.action"
-              class="w-full text-left px-2 py-1.5 hover:bg-white/10 transition-colors whitespace-nowrap flex items-center gap-2"
-              :class="{ 'text-red-400 hover:text-red-300': child.danger }"
-              @click="onSubSelect(child.action)"
+              class="w-full text-left px-2 py-1.5 hover:bg-white/10 transition-colors flex items-center justify-between gap-2"
             >
-              <el-icon v-if="child.icon" :size="12" class="flex-shrink-0">
-                <component :is="getIcon(child.action)" />
-              </el-icon>
-              <span>{{ child.label }}</span>
+              <div class="flex items-center gap-2 flex-1">
+                <el-icon v-if="item.icon" :size="12" class="flex-shrink-0">
+                  <component :is="getIcon(item.action)" />
+                </el-icon>
+                <span>{{ item.label }}</span>
+              </div>
+              <span class="ml-2 text-gray-500">&#x25B8;</span>
             </button>
+            <!-- Submenu with smart positioning -->
+            <div
+              v-if="openSub === item.action"
+              :ref="(el) => { if (el) subMenuRefs[item.action] = el as HTMLDivElement; }"
+              class="absolute py-1 rounded-md shadow-xl"
+              :class="[
+                shouldSubMenuGoLeft(item.action)
+                  ? 'right-full mr-0.5'
+                  : 'left-full ml-0.5'
+              ]"
+              :style="{
+                ...getSubMenuStyle(item.action, 0),
+                background: 'var(--tm-bg-elevated)',
+                border: '1px solid var(--tm-border)',
+                minWidth: '140px'
+              }"
+            >
+              <button
+                v-for="child in item.children"
+                :key="child.action"
+                class="w-full text-left px-2 py-1.5 hover:bg-white/10 transition-colors whitespace-nowrap flex items-center gap-2"
+                :class="{ 'text-red-400 hover:text-red-300': child.danger }"
+                @click="onSubSelect(child.action)"
+              >
+                <el-icon v-if="child.icon" :size="12" class="flex-shrink-0">
+                  <component :is="getIcon(child.action)" />
+                </el-icon>
+                <span>{{ child.label }}</span>
+              </button>
+            </div>
           </div>
-        </div>
 
-        <!-- Normal item -->
-        <button
-          v-else
-          class="w-full text-left px-2 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
-          :class="{ 'text-red-400 hover:text-red-300': item.danger }"
-          @click="handleClick(item)"
-        >
-          <el-icon v-if="item.icon" :size="12" class="flex-shrink-0">
-            <component :is="getIcon(item.action)" />
-          </el-icon>
-          <span>{{ item.label }}</span>
-        </button>
+          <!-- Normal item -->
+          <button
+            v-else
+            class="w-full text-left px-2 py-1.5 hover:bg-white/10 transition-colors flex items-center gap-2"
+            :class="{ 'text-red-400 hover:text-red-300': item.danger }"
+            @click="handleClick(item)"
+          >
+            <el-icon v-if="item.icon" :size="12" class="flex-shrink-0">
+              <component :is="getIcon(item.action)" />
+            </el-icon>
+            <span>{{ item.label }}</span>
+          </button>
+        </template>
       </template>
     </div>
   </Teleport>
