@@ -293,6 +293,7 @@ pub fn run() {
             commands::local_fs::security_status,
             commands::local_fs::open_url,
             commands::local_fs::save_file_dialog,
+            commands::local_fs::open_local_terminal,
             // Update
             commands::update::get_platform_info,
             commands::update::download_update,
