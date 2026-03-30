@@ -52,10 +52,8 @@ function formatSize(bytes: number): string {
 }
 
 function buildFullPath(name: string): string {
-  if (sftpStore.currentPath === "/") {
-    return `/${name}`;
-  }
-  return `${sftpStore.currentPath}/${name}`;
+  const basePath = sftpStore.currentPath === "/" ? "" : sftpStore.currentPath;
+  return `${basePath}/${name}`;
 }
 
 const ctxItems = computed(() => {
