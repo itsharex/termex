@@ -16,7 +16,8 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import ContextMenu from "@/components/sidebar/ContextMenu.vue";
 import type { MenuItem } from "@/components/sidebar/ContextMenu.vue";
 import FileInfoDialog from "./FileInfoDialog.vue";
-import ChmodDialog from "./ChmodDialog.vue";
+// TODO: Enable chmod once russh-sftp provides setstat API
+// import ChmodDialog from "./ChmodDialog.vue";
 
 const { t } = useI18n();
 const sftpStore = useSftpStore();
@@ -33,7 +34,8 @@ const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 const selectedEntry = ref<FileEntry | null>(null);
 const fileInfoDialogVisible = ref(false);
-const chmodDialogVisible = ref(false);
+// TODO: Enable chmod once russh-sftp provides setstat API
+// const chmodDialogVisible = ref(false);
 
 function handleDoubleClick(entry: FileEntry) {
   if (entry.isDir) {
@@ -136,10 +138,11 @@ const ctxItems = computed(() => {
       action: "refresh",
     },
     { label: "", action: "divider5", divided: true },
-    {
-      label: t("sftp.chmod"),
-      action: "chmod",
-    },
+    // TODO: Enable chmod once russh-sftp provides setstat API
+    // {
+    //   label: t("sftp.chmod"),
+    //   action: "chmod",
+    // },
     {
       label: t("sftp.fileInfo"),
       action: "fileInfo",
@@ -260,9 +263,10 @@ async function handleContextMenuSelect(action: string) {
       case "refresh":
         await sftpStore.refresh();
         break;
-      case "chmod":
-        chmodDialogVisible.value = true;
-        break;
+      // TODO: Enable chmod once russh-sftp provides setstat API
+      // case "chmod":
+      //   chmodDialogVisible.value = true;
+      //   break;
       case "fileInfo":
         fileInfoDialogVisible.value = true;
         break;
@@ -285,17 +289,18 @@ async function handleNewFile() {
   } catch { /* cancelled */ }
 }
 
-async function handleChmodConfirm(mode: number) {
-  if (selectedEntry.value) {
-    try {
-      await sftpStore.chmod(selectedEntry.value, mode);
-      ElMessage.success(t("sftp.permissionsUpdated"));
-      chmodDialogVisible.value = false;
-    } catch (err) {
-      ElMessage.error(`${t("sftp.error")}: ${err}`);
-    }
-  }
-}
+// TODO: Enable chmod once russh-sftp provides setstat API
+// async function handleChmodConfirm(mode: number) {
+//   if (selectedEntry.value) {
+//     try {
+//       await sftpStore.chmod(selectedEntry.value, mode);
+//       ElMessage.success(t("sftp.permissionsUpdated"));
+//       chmodDialogVisible.value = false;
+//     } catch (err) {
+//       ElMessage.error(`${t("sftp.error")}: ${err}`);
+//     }
+//   }
+// }
 
 // Breadcrumbs
 const breadcrumbs = computed(() => {
@@ -530,12 +535,12 @@ async function handleHtmlDrop(e: DragEvent) {
       @close="fileInfoDialogVisible = false"
     />
 
-    <!-- Chmod Dialog -->
-    <ChmodDialog
+    <!-- Chmod Dialog (TODO: Enable once russh-sftp provides setstat API) -->
+    <!-- <ChmodDialog
       :visible="chmodDialogVisible"
       :entry="selectedEntry"
       @confirm="handleChmodConfirm"
       @close="chmodDialogVisible = false"
-    />
+    /> -->
   </div>
 </template>

@@ -140,7 +140,7 @@ impl LlamaServerState {
         eprintln!(">>> [MOD] Model: {:?}", &model_path);
         eprintln!(">>> [MOD] Port: {}", port);
 
-        let mut child = std::process::Command::new(&actual_binary_path)
+        let child = std::process::Command::new(&actual_binary_path)
             .arg("--model")
             .arg(&model_path)
             .arg("--port")

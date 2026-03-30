@@ -285,19 +285,21 @@ export const useSftpStore = defineStore("sftp", () => {
     await listDir(currentPath.value);
   }
 
+  // TODO: Enable chmod once russh-sftp provides setstat API
   /** Changes file permissions. */
-  async function chmod(entry: FileEntry, mode: number): Promise<void> {
-    if (!sessionId.value) return;
-    const path =
-      currentPath.value === "/"
-        ? `/${entry.name}`
-        : `${currentPath.value}/${entry.name}`;
-    await tauriInvoke("sftp_chmod", {
-      sessionId: sessionId.value,
-      path,
-      mode,
-    });
-    await listDir(currentPath.value);
+  async function chmod(_entry: FileEntry, _mode: number): Promise<void> {
+    throw new Error("chmod not yet supported - russh-sftp API limitation");
+    // if (!sessionId.value) return;
+    // const path =
+    //   currentPath.value === "/"
+    //     ? `/${entry.name}`
+    //     : `${currentPath.value}/${entry.name}`;
+    // await tauriInvoke("sftp_chmod", {
+    //   sessionId: sessionId.value,
+    //   path,
+    //   mode,
+    // });
+    // await listDir(currentPath.value);
   }
 
   // ── Internal ───────────────────────────────────────────────

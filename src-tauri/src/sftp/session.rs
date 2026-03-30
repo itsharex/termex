@@ -246,17 +246,12 @@ impl SftpHandle {
         Ok(abs)
     }
 
-    /// Changes file permissions.
-    pub async fn chmod(&self, path: &str, mode: u32) -> Result<(), SftpError> {
-        use russh_sftp::protocol::{FileAttrs, FilePermissions};
-
-        let perms = FilePermissions::from_mask(mode);
-        let attrs = FileAttrs {
-            permissions: Some(perms),
-            ..Default::default()
-        };
-        self.sftp.setstat(path, attrs).await?;
-        Ok(())
+    /// Changes file permissions (chmod).
+    /// TODO: Implement once russh-sftp provides setstat/chmod API
+    /// Currently not supported in russh-sftp 2.1
+    #[allow(dead_code)]
+    pub async fn chmod(&self, _path: &str, _mode: u32) -> Result<(), SftpError> {
+        Err(SftpError::Sftp("chmod not yet supported - russh-sftp API limitation".to_string()))
     }
 
     /// Closes the SFTP session.

@@ -191,17 +191,19 @@ pub async fn sftp_canonicalize(
     sftp.canonicalize(&path).await.map_err(|e| e.to_string())
 }
 
-/// Changes file permissions (chmod).
-#[tauri::command]
-pub async fn sftp_chmod(
-    state: State<'_, AppState>,
-    session_id: String,
-    path: String,
-    mode: u32,
-) -> Result<(), String> {
-    let sessions = state.sftp_sessions.read().await;
-    let sftp = sessions
-        .get(&session_id)
-        .ok_or_else(|| SftpError::SessionNotFound(session_id).to_string())?;
-    sftp.chmod(&path, mode).await.map_err(|e| e.to_string())
-}
+// TODO: Implement chmod once russh-sftp provides setstat API
+// Currently not supported in russh-sftp 2.1
+// /// Changes file permissions (chmod).
+// #[tauri::command]
+// pub async fn sftp_chmod(
+//     state: State<'_, AppState>,
+//     session_id: String,
+//     path: String,
+//     mode: u32,
+// ) -> Result<(), String> {
+//     let sessions = state.sftp_sessions.read().await;
+//     let sftp = sessions
+//         .get(&session_id)
+//         .ok_or_else(|| SftpError::SessionNotFound(session_id).to_string())?;
+//     sftp.chmod(&path, mode).await.map_err(|e| e.to_string())
+// }
