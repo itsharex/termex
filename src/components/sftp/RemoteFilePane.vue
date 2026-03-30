@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSftpStore } from "@/stores/sftpStore";
 import type { FileEntry } from "@/types/sftp";
+import { tauriInvoke } from "@/utils/tauri";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Folder,
@@ -197,15 +198,17 @@ async function handleRename(entry: FileEntry) {
 
 async function handleDownload(entry: FileEntry) {
   try {
-    const { value } = await ElMessageBox.prompt(
-      t("sftp.downloadPrompt"), t("sftp.download"),
-      { confirmButtonText: t("sftp.confirm"), cancelButtonText: t("sftp.cancel"), inputValue: `~/Downloads/${entry.name}` },
-    );
-    if (value) {
-      await sftpStore.download(entry.name, value);
+    const path = await tauriInvoke<string | null>("save_file_dialog", {
+      defaultName: entry.name,
+      title: t("sftp.download"),
+    });
+    if (path) {
+      await sftpStore.download(entry.name, path);
       ElMessage.success(t("sftp.downloadStarted"));
     }
-  } catch { /* cancelled */ }
+  } catch (err) {
+    ElMessage.error(`${t("sftp.error")}: ${err}`);
+  }
 }
 
 async function handleMkdir() {

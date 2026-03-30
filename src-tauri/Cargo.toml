@@ -40,6 +40,7 @@ futures-util = "0.3"
 hex = "0.4"
 open = "5"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+rfd = "0.17.2"
 
 [profile.dev]
 incremental = true

@@ -130,6 +130,17 @@ pub fn open_local_terminal() -> Result<(), String> {
     }
 }
 
+/// Opens a native save file dialog and returns the selected path.
+#[tauri::command]
+pub async fn save_file_dialog(default_name: String, _title: String) -> Result<Option<String>, String> {
+    let path = rfd::AsyncFileDialog::new()
+        .set_file_name(default_name)
+        .save_file()
+        .await;
+
+    Ok(path.map(|p| p.path().to_string_lossy().to_string()))
+}
+
 /// Returns the current security/keychain status.
 #[tauri::command]
 pub fn security_status(state: State<'_, AppState>) -> Result<SecurityStatus, String> {
