@@ -118,6 +118,8 @@ export const useSftpStore = defineStore("sftp", () => {
   async function enterDir(name: string): Promise<void> {
     const basePath = currentPath.value === "/" ? "" : currentPath.value;
     const newPath = `${basePath}/${name}`;
+    // Update path immediately for instant UI feedback
+    currentPath.value = newPath;
     await listDir(newPath);
   }
 

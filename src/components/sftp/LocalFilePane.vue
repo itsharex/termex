@@ -76,6 +76,8 @@ async function listDir(path: string) {
 async function enterDir(name: string) {
   const basePath = currentPath.value === "/" ? "" : currentPath.value;
   const newPath = `${basePath}/${name}`;
+  // Update path immediately for instant UI feedback
+  currentPath.value = newPath;
   await listDir(newPath);
 }
 
