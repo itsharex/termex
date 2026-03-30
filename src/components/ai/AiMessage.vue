@@ -5,6 +5,7 @@ import type { AiMessage } from "@/types/ai";
 import { CopyDocument, Position, Loading } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { tauriInvoke } from "@/utils/tauri";
+import { useAiStore } from "@/stores/aiStore";
 
 interface DownloadedModel {
   id: string;
@@ -14,6 +15,7 @@ interface DownloadedModel {
 }
 
 const { t } = useI18n();
+const aiStore = useAiStore();
 const props = defineProps<{
   message: AiMessage;
 }>();
@@ -65,9 +67,30 @@ async function handleLaunch() {
   launching.value = true;
   try {
     await tauriInvoke("local_ai_start_engine", { modelPath: model.path });
-    ElMessage.success(`Started model: ${model.id}`);
+
+    // Remove the engine_not_running system message
+    const msgIndex = aiStore.messages.findIndex(
+      (m) => m.role === "system" && m.content === "engine_not_running"
+    );
+    if (msgIndex !== -1) {
+      aiStore.messages.splice(msgIndex, 1);
+    }
+
+    // Add success message
+    aiStore.messages.push({
+      id: crypto.randomUUID(),
+      role: "system",
+      content: `engine_started:${model.id}`,
+      timestamp: new Date().toISOString(),
+    });
   } catch (err) {
-    ElMessage.error(`Failed to start engine: ${err}`);
+    // Add error message to conversation
+    aiStore.messages.push({
+      id: crypto.randomUUID(),
+      role: "system",
+      content: `engine_error:${err}`,
+      timestamp: new Date().toISOString(),
+    });
   } finally {
     launching.value = false;
   }
@@ -81,8 +104,32 @@ onMounted(() => {
 </script>
 
 <template>
+  <!-- System message for engine started successfully -->
+  <div v-if="message.role === 'system' && message.content.startsWith('engine_started:')" class="mr-8">
+    <div class="rounded-lg p-3 text-sm" style="background: var(--tm-ai-msg-assistant-bg)">
+      <div style="color: var(--tm-text-primary)">
+        ✅ Local AI engine started successfully
+      </div>
+      <div class="text-xs mt-1" style="color: var(--tm-text-muted)">
+        Model: {{ message.content.replace('engine_started:', '') }}
+      </div>
+    </div>
+  </div>
+
+  <!-- System message for engine error -->
+  <div v-else-if="message.role === 'system' && message.content.startsWith('engine_error:')" class="mr-8">
+    <div class="rounded-lg p-3 text-sm" style="background: var(--tm-ai-msg-assistant-bg)">
+      <div style="color: #f87171">
+        ❌ Failed to start engine
+      </div>
+      <div class="text-xs mt-1" style="color: #fed7aa">
+        {{ message.content.replace('engine_error:', '') }}
+      </div>
+    </div>
+  </div>
+
   <!-- System message for engine not running -->
-  <div v-if="message.role === 'system' && message.content === 'engine_not_running'" class="mr-8">
+  <div v-else-if="message.role === 'system' && message.content === 'engine_not_running'" class="mr-8">
     <div class="rounded-lg p-3 text-sm" style="background: var(--tm-ai-msg-assistant-bg)">
       <div style="color: var(--tm-text-primary)" class="mb-3">
         🔧 Local AI engine is not running
@@ -135,7 +182,7 @@ onMounted(() => {
 
   <!-- Regular user/assistant messages -->
   <div
-    v-else
+    v-else-if="message.role === 'user' || message.role === 'assistant'"
     class="rounded-lg p-2.5 text-sm"
     :class="message.role === 'user' ? 'ml-8' : 'mr-8'"
     :style="
