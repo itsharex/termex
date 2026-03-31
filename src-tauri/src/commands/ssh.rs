@@ -7,15 +7,14 @@ use crate::ssh::{auth, SshError};
 use crate::state::AppState;
 use crate::storage::models::AuthType;
 
-/// Connects to an SSH server and opens a shell session.
+/// Connects to an SSH server and authenticates (without opening a shell).
 /// Returns the session_id for subsequent operations.
+/// Call `ssh_open_shell` after terminal UI is mounted to open the shell with correct dimensions.
 #[tauri::command]
 pub async fn ssh_connect(
     state: State<'_, AppState>,
     app: AppHandle,
     server_id: String,
-    cols: u32,
-    rows: u32,
 ) -> Result<String, String> {
     let session_id = uuid::Uuid::new_v4().to_string();
     let status_event = format!("ssh://status/{session_id}");
@@ -233,23 +232,17 @@ pub async fn ssh_connect(
     // Store proxy_chain in session for later cleanup
     ssh_session.proxy_chain = proxy_chain;
 
-    // Open shell channel
-    ssh_session
-        .open_shell(app.clone(), session_id.clone(), cols, rows)
-        .await
-        .map_err(|e| emit_error(&app, &status_event, &e))?;
-
-    // Store session
+    // Store session (shell not opened yet — frontend calls ssh_open_shell after terminal mount)
     {
         let mut sessions = state.sessions.write().await;
         sessions.insert(session_id.clone(), ssh_session);
     }
 
-    // Emit connected status
+    // Emit authenticated status (shell not yet open)
     let _ = app.emit(
         &status_event,
         serde_json::json!({
-            "status": "connected",
+            "status": "authenticated",
             "message": format!("{}@{}:{}", server.username, server.host, server.port),
         }),
     );
@@ -264,6 +257,36 @@ pub async fn ssh_connect(
     });
 
     Ok(session_id)
+}
+
+/// Opens a shell channel on an already-authenticated SSH session.
+/// Called by the frontend after the terminal UI is mounted and actual dimensions are known.
+#[tauri::command]
+pub async fn ssh_open_shell(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    session_id: String,
+    cols: u32,
+    rows: u32,
+) -> Result<(), String> {
+    let mut sessions = state.sessions.write().await;
+    let session = sessions
+        .get_mut(&session_id)
+        .ok_or_else(|| SshError::SessionNotFound(session_id.clone()).to_string())?;
+
+    session
+        .open_shell(app.clone(), session_id.clone(), cols, rows)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Emit connected status now that shell is ready
+    let status_event = format!("ssh://status/{session_id}");
+    let _ = app.emit(
+        &status_event,
+        serde_json::json!({"status": "connected", "message": "shell opened"}),
+    );
+
+    Ok(())
 }
 
 /// Tests SSH connectivity using form input (without saving).

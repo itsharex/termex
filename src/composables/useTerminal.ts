@@ -6,6 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 import { tauriInvoke, tauriListen } from "@/utils/tauri";
 import { getTerminalTheme } from "@/utils/colors";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useSessionStore } from "@/stores/sessionStore";
 import { buildFontFamilyCSS } from "@/utils/fontLoader";
 
 /**
@@ -24,11 +25,13 @@ export function useTerminal(sessionId: Ref<string>) {
   /** Mounts xterm.js into a DOM element and binds to the SSH session. */
   async function mount(el: HTMLElement) {
     const settingsStore = useSettingsStore();
+    const sessionStore = useSessionStore();
     terminal = new Terminal({
       cursorBlink: settingsStore.cursorBlink,
       cursorStyle: settingsStore.cursorStyle,
       fontSize: settingsStore.fontSize,
       fontFamily: buildFontFamilyCSS(settingsStore.fontFamily),
+      scrollback: settingsStore.scrollbackLines,
       theme: getTerminalTheme(),
       allowProposedApi: true,
     });
@@ -50,6 +53,14 @@ export function useTerminal(sessionId: Ref<string>) {
     terminal.focus();
     // Ensure focus after xterm fully renders
     requestAnimationFrame(() => terminal?.focus());
+
+    // Open shell with actual terminal dimensions (not hardcoded 80x24)
+    const { cols, rows } = terminal;
+    try {
+      await sessionStore.openShell(sessionId.value, cols, rows);
+    } catch (err) {
+      terminal.write(`\r\n\x1b[31m[Shell error: ${err}]\x1b[0m\r\n`);
+    }
 
     // User input → SSH
     terminal.onData((data: string) => {

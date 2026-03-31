@@ -24,12 +24,11 @@ export const useSessionStore = defineStore("session", () => {
 
   // ── Actions ────────────────────────────────────────────────
 
-  /** Opens an SSH connection and creates a tab immediately. */
+  /** Opens an SSH connection (authenticate only) and creates a tab immediately.
+   *  Shell is opened later by useTerminal after the terminal UI is mounted. */
   async function connect(
     serverId: string,
     serverName: string,
-    cols: number,
-    rows: number,
   ): Promise<void> {
     // 1. Create tab + session immediately so user sees feedback
     const tabKey = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -55,12 +54,10 @@ export const useSessionStore = defineStore("session", () => {
     tabs.value.push(tab);
     activeSessionId.value = placeholderId;
 
-    // 2. Attempt SSH connection in the background
+    // 2. Attempt SSH connection (authenticate only, no shell yet)
     try {
       const realId = await tauriInvoke<string>("ssh_connect", {
         serverId,
-        cols,
-        rows,
       });
 
       // 3. Success — replace placeholder with real session
@@ -72,7 +69,7 @@ export const useSessionStore = defineStore("session", () => {
         id: realId,
         serverId,
         serverName,
-        status: "connected",
+        status: "authenticated",
         startedAt: session.startedAt,
       };
       sessions.value.set(realId, realSession);
@@ -87,6 +84,20 @@ export const useSessionStore = defineStore("session", () => {
         s.status = "error";
       }
       throw err;
+    }
+  }
+
+  /** Opens the shell channel with actual terminal dimensions.
+   *  Called by useTerminal after fitAddon calculates real cols/rows. */
+  async function openShell(
+    sessionId: string,
+    cols: number,
+    rows: number,
+  ): Promise<void> {
+    await tauriInvoke("ssh_open_shell", { sessionId, cols, rows });
+    const session = sessions.value.get(sessionId);
+    if (session) {
+      session.status = "connected";
     }
   }
 
@@ -149,6 +160,7 @@ export const useSessionStore = defineStore("session", () => {
     activeSession,
     activeTab,
     connect,
+    openShell,
     disconnect,
     updateStatus,
     setActive,

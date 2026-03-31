@@ -1,4 +1,4 @@
-export type SessionStatus = "connecting" | "connected" | "disconnected" | "error";
+export type SessionStatus = "connecting" | "authenticated" | "connected" | "disconnected" | "error";
 
 export interface Session {
   id: string;

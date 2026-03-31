@@ -27,7 +27,7 @@ let dragOverCount = 0;
 
 async function handleConnect(server: Server) {
   try {
-    await sessionStore.connect(server.id, server.name, 80, 24);
+    await sessionStore.connect(server.id, server.name);
   } catch (e) {
     ElMessage.error(`${server.name}: ${String(e)}`);
   }

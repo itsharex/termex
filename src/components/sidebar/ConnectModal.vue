@@ -211,7 +211,7 @@ async function handleSaveAndConnect() {
       server = await serverStore.createServer(input);
     }
     dialogVisible.value = false;
-    await sessionStore.connect(server.id, server.name, 80, 24);
+    await sessionStore.connect(server.id, server.name);
   } catch (e) {
     testResult.value = { ok: false, msg: String(e) };
   } finally {

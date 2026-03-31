@@ -222,6 +222,7 @@ pub fn run() {
             commands::server::group_reorder,
             // SSH
             commands::ssh::ssh_connect,
+            commands::ssh::ssh_open_shell,
             commands::ssh::ssh_test,
             commands::ssh::ssh_disconnect,
             commands::ssh::ssh_write,

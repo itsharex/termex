@@ -150,7 +150,7 @@ async function onCtxSelect(action: string) {
     // Re-connect the same server
     const session = sessionStore.sessions.get(sid);
     if (session) {
-      sessionStore.connect(session.serverId, session.serverName, 80, 24);
+      sessionStore.connect(session.serverId, session.serverName);
     }
   } else if (action === "rename") {
     if (!tab) return;
@@ -162,7 +162,7 @@ async function onCtxSelect(action: string) {
       const sftpWasOpen = sftpStore.sessionId === sid && sftpStore.panelVisible;
 
       sessionStore.disconnect(sid);
-      await sessionStore.connect(session.serverId, session.serverName, 80, 24);
+      await sessionStore.connect(session.serverId, session.serverName);
 
       // Reopen SFTP if it was open before
       if (sftpWasOpen && sessionStore.activeSession?.status === "connected") {
@@ -183,7 +183,7 @@ async function onCtxSelect(action: string) {
 
     for (const s of allSessions) {
       const wasSftpOpen = sftpSessionIds.get(s.id) ?? false;
-      await sessionStore.connect(s.serverId, s.serverName, 80, 24);
+      await sessionStore.connect(s.serverId, s.serverName);
 
       // Reopen SFTP for sessions that had it open
       // Note: After connect, the new session is now active
