@@ -203,56 +203,69 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
           ASSETS=$(gh api repos/${{ github.repository }}/releases/tags/$TAG --jq '.assets[] | "\(.id) \(.name)"')
 
+          # Detect arch from original filename
+          detect_arch() {
+            local name="$1"
+            if [[ "$name" == *"aarch64"* ]] || [[ "$name" == *"arm64"* ]]; then
+              echo "aarch64"
+            else
+              echo "x64"
+            fi
+          }
+
           while IFS= read -r line; do
+            [ -z "$line" ] && continue
             ASSET_ID=$(echo "$line" | awk '{print $1}')
             OLD_NAME=$(echo "$line" | awk '{$1=""; print $0}' | xargs)
+            NEW_NAME=""
+            ARCH=$(detect_arch "$OLD_NAME")
 
-            NEW_NAME="$OLD_NAME"
-
-            # Add OS label if not already present
             case "$OLD_NAME" in
-              *.dmg|*.dmg.sig)
-                if [[ "$OLD_NAME" == *"aarch64"* ]]; then
-                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.dmg/_mac_aarch64.dmg/')
-                elif [[ "$OLD_NAME" == *"x64"* ]] || [[ "$OLD_NAME" == *"x86_64"* ]]; then
-                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.dmg/_mac_x86_64.dmg/')
-                fi
+              *.dmg)
+                NEW_NAME="Termex_${VERSION}_mac_${ARCH}.dmg"
                 ;;
-              *.msi|*.msi.sig)
-                NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.msi/_win_x64.msi/')
+              *.dmg.sig)
+                NEW_NAME="Termex_${VERSION}_mac_${ARCH}.dmg.sig"
                 ;;
-              *.exe|*.exe.sig)
-                NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.exe/_win_x64.exe/')
+              *setup.exe)
+                NEW_NAME="Termex_${VERSION}_win_${ARCH}_setup.exe"
                 ;;
-              *.deb|*.deb.sig)
-                # Detect architecture: amd64/x86_64 or arm64/aarch64
-                if [[ "$OLD_NAME" == *"amd64"* ]] || [[ "$OLD_NAME" == *"x86_64"* ]]; then
-                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/_amd64\.deb/_linux_x86_64.deb/; s/_x86_64\.deb/_linux_x86_64.deb/')
-                elif [[ "$OLD_NAME" == *"arm64"* ]] || [[ "$OLD_NAME" == *"aarch64"* ]]; then
-                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/_arm64\.deb/_linux_aarch64.deb/; s/_aarch64\.deb/_linux_aarch64.deb/')
-                fi
+              *setup.exe.sig)
+                NEW_NAME="Termex_${VERSION}_win_${ARCH}_setup.exe.sig"
                 ;;
-              *.rpm|*.rpm.sig)
-                # Detect architecture: x86_64 or aarch64
-                if [[ "$OLD_NAME" == *"x86_64"* ]]; then
-                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.x86_64\.rpm/_linux_x86_64.rpm/')
-                elif [[ "$OLD_NAME" == *"aarch64"* ]]; then
-                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/\.aarch64\.rpm/_linux_aarch64.rpm/')
-                fi
+              *.msi)
+                NEW_NAME="Termex_${VERSION}_win_${ARCH}.msi"
                 ;;
-              *.AppImage|*.AppImage.sig)
-                # Detect architecture: amd64/x86_64 or arm64/aarch64
-                if [[ "$OLD_NAME" == *"amd64"* ]] || [[ "$OLD_NAME" == *"x86_64"* ]]; then
-                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/_amd64\.AppImage/_linux_x86_64.AppImage/; s/_x86_64\.AppImage/_linux_x86_64.AppImage/')
-                elif [[ "$OLD_NAME" == *"arm64"* ]] || [[ "$OLD_NAME" == *"aarch64"* ]]; then
-                  NEW_NAME=$(echo "$OLD_NAME" | sed 's/_arm64\.AppImage/_linux_aarch64.AppImage/; s/_aarch64\.AppImage/_linux_aarch64.AppImage/')
-                fi
+              *.msi.sig)
+                NEW_NAME="Termex_${VERSION}_win_${ARCH}.msi.sig"
+                ;;
+              *.deb)
+                NEW_NAME="Termex_${VERSION}_linux_${ARCH}.deb"
+                ;;
+              *.deb.sig)
+                NEW_NAME="Termex_${VERSION}_linux_${ARCH}.deb.sig"
+                ;;
+              *.rpm)
+                NEW_NAME="Termex_${VERSION}_linux_${ARCH}.rpm"
+                ;;
+              *.rpm.sig)
+                NEW_NAME="Termex_${VERSION}_linux_${ARCH}.rpm.sig"
+                ;;
+              *.AppImage)
+                NEW_NAME="Termex_${VERSION}_linux_${ARCH}.AppImage"
+                ;;
+              *.AppImage.sig)
+                NEW_NAME="Termex_${VERSION}_linux_${ARCH}.AppImage.sig"
+                ;;
+              *)
+                continue
                 ;;
             esac
 
-            if [ "$NEW_NAME" != "$OLD_NAME" ]; then
+            if [ -n "$NEW_NAME" ] && [ "$NEW_NAME" != "$OLD_NAME" ]; then
               echo "Renaming: $OLD_NAME → $NEW_NAME"
               gh api --method PATCH repos/${{ github.repository }}/releases/assets/$ASSET_ID \
                 -f name="$NEW_NAME" || true
