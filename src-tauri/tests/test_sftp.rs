@@ -26,6 +26,7 @@ fn test_transfer_progress_serialize() {
         transferred: 512,
         total: 1024,
         done: false,
+        error: None,
     };
     let json = serde_json::to_string(&progress).unwrap();
     assert!(json.contains("\"transferId\":\"abc\""));

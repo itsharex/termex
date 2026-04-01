@@ -53,6 +53,8 @@ onUnmounted(() => {
 });
 
 async function handleOsFileDrop(paths: string[]) {
+  // Only handle actual OS file drops (non-empty paths from Finder/Explorer)
+  if (!paths || paths.length === 0) return;
   if (!paneOps.isRemote.value || !paneOps.pane.value.sessionId) return;
   for (const localPath of paths) {
     const fileName = localPath.split("/").pop() ?? localPath;
@@ -179,10 +181,7 @@ const modeSelectorVisible = ref(false);
   <div
     class="h-full flex flex-col min-w-0 relative"
     style="background: var(--tm-bg-surface)"
-    @dragenter="drag.handleDragEnter"
-    @dragleave="drag.handleDragLeave"
-    @dragover="drag.handleDragOver"
-    @drop="drag.handleDrop"
+    @mouseup="drag.handlePaneDrop()"
   >
     <!-- Toolbar -->
     <div
@@ -315,11 +314,10 @@ const modeSelectorVisible = ref(false);
         v-for="entry in paneOps.sortedEntries.value"
         v-else
         :key="entry.name"
-        class="flex items-center gap-1.5 px-2 py-0.5 hover:bg-white/5 cursor-default text-[11px] group"
-        draggable="true"
+        class="flex items-center gap-1.5 px-2 py-0.5 hover:bg-white/5 cursor-grab text-[11px] group select-none"
+        @mousedown="drag.handleMouseDown($event, entry, paneOps.buildFullPath(entry.name))"
         @dblclick="paneOps.handleDoubleClick(entry)"
         @contextmenu="handleContextMenu($event, entry)"
-        @dragstart="drag.handleDragStart($event, entry, paneOps.buildFullPath(entry.name))"
       >
         <!-- Icon -->
         <el-icon :size="13" class="shrink-0">
@@ -353,9 +351,9 @@ const modeSelectorVisible = ref(false);
       </div>
     </div>
 
-    <!-- Drag overlay (cross-pane) -->
+    <!-- Drop target overlay (cross-pane mouse drag) -->
     <div
-      v-if="drag.isDragOver.value"
+      v-if="drag.isDropTarget.value"
       class="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
       style="background: rgba(34, 197, 94, 0.08); border: 2px dashed rgba(34, 197, 94, 0.4)"
     >
@@ -389,6 +387,18 @@ const modeSelectorVisible = ref(false);
       :entry="selectedEntry"
       @close="fileInfoDialogVisible = false"
     />
+
+    <!-- Drag ghost (floating label following cursor) -->
+    <Teleport to="body">
+      <div
+        v-if="drag.isDragging.value && drag.activeDrag.value?.side === props.side"
+        class="fixed z-50 pointer-events-none px-2 py-1 rounded text-[10px] shadow-lg"
+        style="background: var(--tm-bg-elevated); color: var(--tm-text-primary); border: 1px solid var(--tm-border)"
+        :style="{ left: drag.dragGhostPos.value.x + 12 + 'px', top: drag.dragGhostPos.value.y + 12 + 'px' }"
+      >
+        📄 {{ drag.activeDrag.value?.name }}
+      </div>
+    </Teleport>
   </div>
 </template>
 

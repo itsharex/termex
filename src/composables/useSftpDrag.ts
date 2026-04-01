@@ -1,6 +1,7 @@
 import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
+import { tauriInvoke } from "@/utils/tauri";
 import { useSftpStore } from "@/stores/sftpStore";
 import type { FileEntry } from "@/types/sftp";
 
@@ -14,75 +15,97 @@ export interface SftpDragData {
   isDir: boolean;
 }
 
-const MIME_TYPE = "text/x-termex-sftp";
+/**
+ * Global drag state shared between pane instances.
+ * Uses mouse events instead of HTML5 drag-drop (Tauri WKWebView
+ * intercepts native drag events, making HTML5 drag-drop unreliable).
+ */
+const activeDrag = ref<SftpDragData | null>(null);
+const isDragging = ref(false);
+const dragGhostPos = ref({ x: 0, y: 0 });
+
+/** Start threshold — only activate drag after moving 5px (avoids accidental drags). */
+let mouseDownPos: { x: number; y: number } | null = null;
+let pendingDragData: { entry: FileEntry; fullPath: string; side: "left" | "right"; mode: "local" | "remote"; sessionId: string | null } | null = null;
+
+function onGlobalMouseMove(e: MouseEvent) {
+  if (pendingDragData && mouseDownPos) {
+    const dx = e.clientX - mouseDownPos.x;
+    const dy = e.clientY - mouseDownPos.y;
+    if (Math.abs(dx) + Math.abs(dy) > 5) {
+      // Activate drag
+      activeDrag.value = {
+        side: pendingDragData.side,
+        mode: pendingDragData.mode,
+        sessionId: pendingDragData.sessionId,
+        name: pendingDragData.entry.name,
+        fullPath: pendingDragData.fullPath,
+        isDir: pendingDragData.entry.isDir,
+      };
+      isDragging.value = true;
+      pendingDragData = null;
+    }
+  }
+  if (isDragging.value) {
+    dragGhostPos.value = { x: e.clientX, y: e.clientY };
+  }
+}
+
+function onGlobalMouseUp() {
+  if (isDragging.value) {
+    // Drop will be handled by the pane under the cursor via its mouseup handler
+    // Clean up after a tick to let the drop handler read activeDrag
+    setTimeout(() => {
+      activeDrag.value = null;
+      isDragging.value = false;
+    }, 50);
+  }
+  pendingDragData = null;
+  mouseDownPos = null;
+}
+
+// Register global listeners once
+let globalListenersRegistered = false;
+function ensureGlobalListeners() {
+  if (globalListenersRegistered) return;
+  globalListenersRegistered = true;
+  window.addEventListener("mousemove", onGlobalMouseMove);
+  window.addEventListener("mouseup", onGlobalMouseUp);
+}
 
 /**
- * Composable that handles drag-and-drop between SFTP panes,
- * including cross-pane transfer type inference.
+ * Composable for SFTP cross-pane drag-and-drop using mouse events.
  */
 export function useSftpDrag(side: "left" | "right") {
   const { t } = useI18n();
   const sftpStore = useSftpStore();
 
-  const isDragOver = ref(false);
   const pane = computed(() => sftpStore.getPane(side));
+  const isDropTarget = computed(() =>
+    activeDrag.value !== null && activeDrag.value.side !== side && isDragging.value,
+  );
 
-  /** Sets drag data when dragging a file out of this pane. */
-  function handleDragStart(e: DragEvent, entry: FileEntry, fullPath: string) {
-    if (!e.dataTransfer) return;
-    const data: SftpDragData = {
+  ensureGlobalListeners();
+
+  /** Called on mousedown on a file entry — prepares for potential drag. */
+  function handleMouseDown(e: MouseEvent, entry: FileEntry, fullPath: string) {
+    if (e.button !== 0) return; // Left button only
+    e.preventDefault(); // Prevent text selection during drag
+    mouseDownPos = { x: e.clientX, y: e.clientY };
+    pendingDragData = {
+      entry,
+      fullPath,
       side,
       mode: pane.value.mode,
       sessionId: pane.value.sessionId,
-      name: entry.name,
-      fullPath,
-      isDir: entry.isDir,
     };
-    e.dataTransfer.setData(MIME_TYPE, JSON.stringify(data));
-    e.dataTransfer.effectAllowed = "copy";
   }
 
-  function handleDragEnter(e: DragEvent) {
-    e.preventDefault();
-    if (e.dataTransfer?.types.includes(MIME_TYPE)) {
-      isDragOver.value = true;
-    }
-  }
+  /** Called on mouseup on a pane — handles drop if drag is active from the other pane. */
+  async function handlePaneDrop() {
+    const src = activeDrag.value;
+    if (!src || src.side === side || !isDragging.value) return;
 
-  function handleDragLeave(e: DragEvent) {
-    const target = e.currentTarget as HTMLElement;
-    const related = e.relatedTarget as HTMLElement | null;
-    if (!target.contains(related)) {
-      isDragOver.value = false;
-    }
-  }
-
-  function handleDragOver(e: DragEvent) {
-    e.preventDefault();
-    if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = "copy";
-    }
-  }
-
-  /** Handles drop on this pane — determines transfer type and initiates. */
-  async function handleDrop(e: DragEvent) {
-    e.preventDefault();
-    isDragOver.value = false;
-
-    const raw = e.dataTransfer?.getData(MIME_TYPE);
-    if (!raw) return;
-
-    let src: SftpDragData;
-    try {
-      src = JSON.parse(raw) as SftpDragData;
-    } catch {
-      return;
-    }
-
-    // Don't drop onto the same pane
-    if (src.side === side) return;
-
-    // Directory transfer not yet supported
     if (src.isDir) {
       ElMessage.info(t("sftp.dirTransferTodo"));
       return;
@@ -96,11 +119,9 @@ export function useSftpDrag(side: "left" | "right") {
 
     try {
       if (src.mode === "local" && dst.mode === "remote" && dst.sessionId) {
-        // Local → Remote: upload
         await sftpStore.uploadFile(dst.sessionId, src.fullPath, dstFullPath);
         ElMessage.success(t("sftp.uploadStarted"));
       } else if (src.mode === "remote" && dst.mode === "local" && src.sessionId) {
-        // Remote → Local: download
         await sftpStore.downloadFile(src.sessionId, src.fullPath, dstFullPath);
         ElMessage.success(t("sftp.downloadStarted"));
       } else if (
@@ -108,10 +129,12 @@ export function useSftpDrag(side: "left" | "right") {
         src.sessionId && dst.sessionId
       ) {
         if (src.sessionId === dst.sessionId) {
-          // Same server: use rename (move)
-          await sftpStore.renameInPane(side, src.fullPath, dstFullPath);
+          await tauriInvoke("sftp_rename", {
+            sessionId: dst.sessionId,
+            oldPath: src.fullPath,
+            newPath: dstFullPath,
+          });
         } else {
-          // Different servers: server-to-server transfer
           const srcName = sftpStore.getPane(src.side).serverName ?? src.sessionId;
           const dstName = dst.serverName ?? dst.sessionId;
           await sftpStore.serverToServerTransfer(
@@ -122,20 +145,21 @@ export function useSftpDrag(side: "left" | "right") {
           ElMessage.success(t("sftp.serverTransfer"));
         }
       }
-
-      // Refresh destination pane
-      await sftpStore.refreshPane(side);
+      // Pane refresh happens automatically when transfer completes
+      // (via listenTransfer in sftpStore)
     } catch (err) {
       ElMessage.error(String(err));
     }
   }
 
   return {
-    isDragOver,
-    handleDragStart,
-    handleDragEnter,
-    handleDragLeave,
-    handleDragOver,
-    handleDrop,
+    // State (for template rendering)
+    activeDrag,
+    isDragging,
+    dragGhostPos,
+    isDropTarget,
+    // Handlers
+    handleMouseDown,
+    handlePaneDrop,
   };
 }

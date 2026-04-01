@@ -157,17 +157,52 @@ async function onCtxSelect(action: string) {
     startRename(tab.tabKey);
   } else if (action === "reconnect") {
     const session = sessionStore.sessions.get(sid);
-    if (session) {
-      // Remember if SFTP was open for this session
-      const sftpWasOpen = sftpStore.sessionId === sid && sftpStore.panelVisible;
+    if (!session) return;
 
-      sessionStore.disconnect(sid);
-      await sessionStore.connect(session.serverId, session.serverName);
+    const sftpWasOpen = sftpStore.sessionId === sid && sftpStore.panelVisible;
+    const tabTitle = tab?.title ?? session.serverName;
+    const { serverId, serverName } = session;
+    const tabIdx = sessionStore.tabs.findIndex((t) => t.sessionId === sid);
+    const wasActive = sessionStore.activeSessionId === sid;
 
-      // Reopen SFTP if it was open before
-      if (sftpWasOpen && sessionStore.activeSession?.status === "connected") {
-        await sftpStore.open(sessionStore.activeSession.id, sessionStore.activeSession.serverName);
+    // 1. Disconnect backend only (don't remove tab or change active)
+    try { await tauriInvoke("ssh_disconnect", { sessionId: sid }); } catch { /* ignore */ }
+    sessionStore.sessions.delete(sid);
+
+    // 2. Update existing tab in-place to "connecting" state
+    const existingTab = sessionStore.tabs[tabIdx];
+    if (!existingTab) return;
+
+    const placeholderId = `connecting-${existingTab.tabKey}`;
+    existingTab.sessionId = placeholderId;
+    existingTab.id = placeholderId;
+    existingTab.title = tabTitle;
+    sessionStore.sessions.set(placeholderId, {
+      id: placeholderId, serverId, serverName,
+      status: "connecting", startedAt: new Date().toISOString(),
+    });
+    if (wasActive) sessionStore.activeSessionId = placeholderId;
+
+    // 3. Connect in background
+    try {
+      const realId = await tauriInvoke<string>("ssh_connect", { serverId });
+      sessionStore.sessions.delete(placeholderId);
+      existingTab.sessionId = realId;
+      existingTab.id = realId;
+      sessionStore.sessions.set(realId, {
+        id: realId, serverId, serverName,
+        status: "authenticated", startedAt: existingTab.title,
+      });
+      if (sessionStore.activeSessionId === placeholderId) {
+        sessionStore.activeSessionId = realId;
       }
+
+      if (sftpWasOpen && sessionStore.activeSession?.status === "connected") {
+        await sftpStore.open(realId, serverName);
+      }
+    } catch {
+      const s = sessionStore.sessions.get(placeholderId);
+      if (s) s.status = "error";
     }
   } else if (action === "reconnect-all") {
     const allSessions = [...sessionStore.sessions.values()];
@@ -211,6 +246,7 @@ async function onCtxSelect(action: string) {
       class="tab-btn group flex items-center gap-1.5 px-3 h-full text-xs transition-colors shrink-0 max-w-[180px]"
            :class="tab.active ? 'tm-tab-active border-b-2 border-b-primary-500' : 'tm-tab-inactive'"
       @click="onTabClick(tab.sessionId)"
+      @mousedown.middle.prevent="sessionStore.disconnect(tab.sessionId)"
       @contextmenu="onTabContextMenu($event, tab.sessionId)"
     >
       <!-- Status dot -->

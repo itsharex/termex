@@ -484,6 +484,11 @@ export const useSftpStore = defineStore("sftp", () => {
         if (progress.error) {
           item.error = progress.error;
         }
+        // Auto-refresh both panes when transfer completes
+        if (progress.done && !progress.error) {
+          refreshPane("left").catch(() => {});
+          refreshPane("right").catch(() => {});
+        }
       }
     }).then((unlisten) => unlistenFns.push(unlisten));
   }
