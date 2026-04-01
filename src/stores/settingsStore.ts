@@ -7,6 +7,8 @@ import { DEFAULT_FONT } from "@/types/fonts";
 import { loadCustomFont, unloadCustomFont, loadAllCustomFonts } from "@/utils/fontLoader";
 import type { KeywordRule } from "@/types/search";
 import { PRESET_KEYWORD_RULES } from "@/types/search";
+import type { KeybindingAction, Keybinding, KeybindingMap } from "@/types/keybindings";
+import { DEFAULT_KEYBINDINGS, keybindingEquals } from "@/types/keybindings";
 
 /** Terminal color scheme preset. */
 export interface TerminalTheme {
@@ -133,6 +135,7 @@ export const useSettingsStore = defineStore("settings", () => {
   const scrollbackLines = ref(5000);
   const terminalTheme = ref("termex-dark");
   const keywordRules = ref<KeywordRule[]>([]);
+  const keybindings = ref<KeybindingMap>({ ...DEFAULT_KEYBINDINGS });
 
   // ── Actions ────────────────────────────────────────────────
 
@@ -176,6 +179,14 @@ export const useSettingsStore = defineStore("settings", () => {
             keywordRules.value = JSON.parse(value) as KeywordRule[];
           } catch {
             keywordRules.value = [];
+          }
+          break;
+        case "keybindings":
+          try {
+            const custom = JSON.parse(value) as Partial<KeybindingMap>;
+            keybindings.value = { ...DEFAULT_KEYBINDINGS, ...custom };
+          } catch {
+            keybindings.value = { ...DEFAULT_KEYBINDINGS };
           }
           break;
       }
@@ -306,6 +317,52 @@ export const useSettingsStore = defineStore("settings", () => {
     return added;
   }
 
+  // ── Keybinding management ──
+
+  /** Persists only the diff from defaults. */
+  function persistKeybindings(): void {
+    const diff: Partial<KeybindingMap> = {};
+    for (const [action, binding] of Object.entries(keybindings.value)) {
+      const defaultBinding = DEFAULT_KEYBINDINGS[action as KeybindingAction];
+      if (!keybindingEquals(binding, defaultBinding)) {
+        diff[action as KeybindingAction] = binding;
+      }
+    }
+    set("keybindings", JSON.stringify(diff));
+  }
+
+  /** Updates a single keybinding and persists. */
+  function updateKeybinding(action: KeybindingAction, binding: Keybinding): void {
+    keybindings.value = { ...keybindings.value, [action]: binding };
+    persistKeybindings();
+  }
+
+  /** Resets a single keybinding to default and persists. */
+  function resetKeybinding(action: KeybindingAction): void {
+    keybindings.value = { ...keybindings.value, [action]: DEFAULT_KEYBINDINGS[action] };
+    persistKeybindings();
+  }
+
+  /** Resets all keybindings to defaults and persists. */
+  function resetAllKeybindings(): void {
+    keybindings.value = { ...DEFAULT_KEYBINDINGS };
+    persistKeybindings();
+  }
+
+  /** Returns the conflicting action if the binding clashes, or null. */
+  function isKeybindingConflict(
+    action: KeybindingAction,
+    binding: Keybinding,
+  ): KeybindingAction | null {
+    for (const [otherAction, otherBinding] of Object.entries(keybindings.value)) {
+      if (otherAction === action) continue;
+      if (keybindingEquals(binding, otherBinding)) {
+        return otherAction as KeybindingAction;
+      }
+    }
+    return null;
+  }
+
   // Auto-persist when values change
   watch(theme, (v) => {
     set("theme", v);
@@ -332,6 +389,7 @@ export const useSettingsStore = defineStore("settings", () => {
     scrollbackLines,
     terminalTheme,
     keywordRules,
+    keybindings,
     loadAll,
     set,
     applyTheme,
@@ -345,5 +403,9 @@ export const useSettingsStore = defineStore("settings", () => {
     updateKeywordRule,
     removeKeywordRule,
     loadPresetKeywordRules,
+    updateKeybinding,
+    resetKeybinding,
+    resetAllKeybindings,
+    isKeybindingConflict,
   };
 });

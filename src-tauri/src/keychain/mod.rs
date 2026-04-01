@@ -192,31 +192,38 @@ pub fn delete(key: &str) -> Result<(), KeychainError> {
 /// into the single-store format. Call once after upgrading from per-entry storage.
 /// After this runs, all subsequent startups only need 1 keychain read.
 pub fn consolidate_from_individual(keys: &[String]) {
-    if !is_available() || keys.is_empty() {
-        return;
-    }
-    let mut found_any = false;
+    // In debug builds, skip OS keychain access entirely
+    #[cfg(debug_assertions)]
+    { let _ = keys; return; }
+
+    #[cfg(not(debug_assertions))]
     {
-        let mut c = match cache().write() {
-            Ok(c) => c,
-            Err(_) => return,
-        };
-        for key in keys {
-            // Skip if already in the new single store
-            if c.contains_key(key) {
-                continue;
-            }
-            // Try reading from old individual keychain entry
-            if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
-                if let Ok(value) = entry.get_password() {
-                    c.insert(key.clone(), value);
-                    found_any = true;
+        if !is_available() || keys.is_empty() {
+            return;
+        }
+        let mut found_any = false;
+        {
+            let mut c = match cache().write() {
+                Ok(c) => c,
+                Err(_) => return,
+            };
+            for key in keys {
+                // Skip if already in the new single store
+                if c.contains_key(key) {
+                    continue;
+                }
+                // Try reading from old individual keychain entry
+                if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, key) {
+                    if let Ok(value) = entry.get_password() {
+                        c.insert(key.clone(), value);
+                        found_any = true;
+                    }
                 }
             }
         }
-    }
-    if found_any {
-        flush();
+        if found_any {
+            flush();
+        }
     }
 }
 

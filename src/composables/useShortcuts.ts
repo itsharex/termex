@@ -1,5 +1,8 @@
 import { onMounted, onUnmounted } from "vue";
 import { useSessionStore } from "@/stores/sessionStore";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { matchesEvent } from "@/types/keybindings";
+import type { KeybindingAction } from "@/types/keybindings";
 
 interface ShortcutHandlers {
   toggleSidebar: () => void;
@@ -11,89 +14,53 @@ interface ShortcutHandlers {
 
 /**
  * Registers global keyboard shortcuts for the application.
+ * Reads keybinding config from settingsStore for data-driven matching.
  */
 export function useShortcuts(handlers: ShortcutHandlers) {
   const sessionStore = useSessionStore();
+  const settingsStore = useSettingsStore();
 
-  function onKeydown(e: KeyboardEvent) {
-    const mod = e.ctrlKey || e.metaKey;
-
-    // Ctrl+F / Cmd+F — search in terminal
-    if (mod && e.key === "f" && !e.shiftKey) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      handlers.openSearch?.();
-      return;
-    }
-
-    // Ctrl+Shift+F / Cmd+Shift+F — cross-tab search
-    if (mod && e.key === "f" && e.shiftKey) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      handlers.openCrossTabSearch?.();
-      return;
-    }
-
-    // Ctrl+\ — toggle sidebar
-    if (mod && e.key === "\\") {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      handlers.toggleSidebar();
-      return;
-    }
-
-    // Ctrl+N — new connection
-    if (mod && e.key === "n") {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      handlers.openNewConnection();
-      return;
-    }
-
-    // Ctrl+, — open settings
-    if (mod && e.key === ",") {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      handlers.openSettings();
-      return;
-    }
-
-    // Ctrl+W — close current tab
-    if (mod && e.key === "w") {
-      e.preventDefault();
-      e.stopImmediatePropagation();
+  /** Action handlers mapped by action ID. */
+  const actionHandlers: Partial<Record<KeybindingAction, () => void>> = {
+    newConnection: () => handlers.openNewConnection(),
+    openSettings: () => handlers.openSettings(),
+    toggleSidebar: () => handlers.toggleSidebar(),
+    toggleAi: () => handlers.openSettings(), // fallback — menu-driven
+    closeTab: () => {
       if (sessionStore.activeSessionId) {
         sessionStore.disconnect(sessionStore.activeSessionId);
       }
-      return;
-    }
+    },
+    nextTab: () => cycleTab(1),
+    prevTab: () => cycleTab(-1),
+    search: () => handlers.openSearch?.(),
+    searchAllTabs: () => handlers.openCrossTabSearch?.(),
+  };
 
-    // Ctrl+Tab — next tab
-    if (mod && e.key === "Tab" && !e.shiftKey) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      cycleTab(1);
-      return;
-    }
+  function onKeydown(e: KeyboardEvent) {
+    const bindings = settingsStore.keybindings;
 
-    // Ctrl+Shift+Tab — previous tab
-    if (mod && e.key === "Tab" && e.shiftKey) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      cycleTab(-1);
-      return;
-    }
-
-    // Ctrl+1~9 — go to tab N
-    if (mod && e.key >= "1" && e.key <= "9") {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const idx = parseInt(e.key) - 1;
-      const tab = sessionStore.tabs[idx];
-      if (tab) {
-        sessionStore.setActive(tab.sessionId);
+    // Check non-goToTab actions first
+    for (const [action, handler] of Object.entries(actionHandlers)) {
+      const binding = bindings[action as KeybindingAction];
+      if (binding && matchesEvent(e, binding)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        handler();
+        return;
       }
-      return;
+    }
+
+    // goToTab1~9
+    for (let i = 1; i <= 9; i++) {
+      const action = `goToTab${i}` as KeybindingAction;
+      if (matchesEvent(e, bindings[action])) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const tab = sessionStore.tabs[i - 1];
+        if (tab) sessionStore.setActive(tab.sessionId);
+        return;
+      }
     }
   }
 
