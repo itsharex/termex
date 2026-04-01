@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, toRef, nextTick } from "vue";
 import { useTerminal } from "@/composables/useTerminal";
+import { useTerminalSearch } from "@/composables/useTerminalSearch";
+import { useKeywordHighlight } from "@/composables/useKeywordHighlight";
 import { useSessionStore } from "@/stores/sessionStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import TerminalSearchBar from "./TerminalSearchBar.vue";
 
 const props = defineProps<{
   sessionId: string;
@@ -17,11 +20,34 @@ const isPlaceholder = computed(() => props.sessionId.startsWith("connecting-"));
 const session = computed(() => sessionStore.sessions.get(props.sessionId));
 const isActive = computed(() => sessionStore.activeSessionId === props.sessionId);
 
-const { mount, fit, setTheme, setFont, dispose } = useTerminal(sessionIdRef);
+const { mount, fit, setTheme, setFont, getSearchAddon, getTerminal, dispose } =
+  useTerminal(sessionIdRef);
 
-onMounted(() => {
+// Search integration
+const search = useTerminalSearch(getSearchAddon);
+const searchBarRef = ref<InstanceType<typeof TerminalSearchBar>>();
+
+// Keyword highlight integration
+const keywordRulesRef = toRef(settingsStore, "keywordRules");
+const highlight = useKeywordHighlight(getTerminal, keywordRulesRef);
+
+/** Opens the search bar (called from parent via expose). */
+function openSearch() {
+  search.open();
+  nextTick(() => searchBarRef.value?.focus());
+}
+
+/** Closes the search bar and returns focus to terminal. */
+function closeSearch() {
+  search.close();
+  const term = getTerminal();
+  term?.focus();
+}
+
+onMounted(async () => {
   if (containerRef.value && !isPlaceholder.value) {
-    mount(containerRef.value);
+    await mount(containerRef.value);
+    highlight.init();
   }
 });
 
@@ -31,7 +57,8 @@ watch(
   async (newId) => {
     if (!newId.startsWith("connecting-") && containerRef.value) {
       await nextTick();
-      mount(containerRef.value);
+      await mount(containerRef.value);
+      highlight.init();
     }
   },
 );
@@ -61,15 +88,30 @@ watch(
   },
 );
 
-defineExpose({ fit, dispose });
+defineExpose({ fit, dispose, openSearch, search });
 </script>
 
 <template>
   <div class="w-full h-full relative overflow-hidden" style="background: var(--tm-terminal-bg)">
-    <!-- Terminal container (hidden during connecting) -->
+    <!-- Terminal container -->
     <div
       ref="containerRef"
       class="w-full h-full"
+    />
+
+    <!-- Search bar overlay -->
+    <TerminalSearchBar
+      ref="searchBarRef"
+      :visible="search.searchVisible.value"
+      :search-term="search.searchTerm.value"
+      :search-options="search.searchOptions.value"
+      :match-index="search.matchIndex.value"
+      :match-count="search.matchCount.value"
+      @update:search-term="search.searchTerm.value = $event"
+      @update:search-options="search.searchOptions.value = $event"
+      @find-next="search.findNext()"
+      @find-previous="search.findPrevious()"
+      @close="closeSearch"
     />
 
     <!-- Connecting / Error overlay -->

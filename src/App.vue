@@ -16,6 +16,7 @@ import SftpPanel from "@/components/sftp/SftpPanel.vue";
 import AiPanel from "@/components/ai/AiPanel.vue";
 import UpdateDialog from "@/components/settings/UpdateDialog.vue";
 import PrivacyDialog from "@/components/settings/PrivacyDialog.vue";
+import CrossTabSearchDialog from "@/components/terminal/CrossTabSearchDialog.vue";
 import { useSftpStore } from "@/stores/sftpStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { checkForUpdate, shouldCheckToday } from "@/utils/update";
@@ -95,6 +96,35 @@ const privacyDialogVisible = ref(false);
 const keychainVerificationVisible = ref(false);
 const keychainVerificationMessage = ref("");
 const modelCatalogUpdateVisible = ref(false);
+const crossTabSearchVisible = ref(false);
+
+// Terminal pane refs for search integration
+const terminalPaneRefs = ref<Map<string, InstanceType<typeof TerminalPane>>>(new Map());
+
+function setTerminalPaneRef(tabKey: string, el: InstanceType<typeof TerminalPane> | null) {
+  if (el) {
+    terminalPaneRefs.value.set(tabKey, el);
+  } else {
+    terminalPaneRefs.value.delete(tabKey);
+  }
+}
+
+function openSearchInActivePane() {
+  const activeTab = sessionStore.activeTab;
+  if (!activeTab) return;
+  const pane = terminalPaneRefs.value.get(activeTab.tabKey);
+  pane?.openSearch();
+}
+
+function handleJumpToMatch(match: { sessionId: string }) {
+  // After CrossTabSearchDialog switches the active tab via sessionStore.setActive,
+  // open search in the target pane so the user can continue navigating
+  const tab = sessionStore.tabs.find((t) => t.sessionId === match.sessionId);
+  if (tab) {
+    const pane = terminalPaneRefs.value.get(tab.tabKey);
+    pane?.openSearch();
+  }
+}
 
 function openNewConnection() {
   editServerId.value = null;
@@ -154,6 +184,8 @@ useShortcuts({
   toggleSidebar: () => (sidebarVisible.value = !sidebarVisible.value),
   openNewConnection,
   openSettings: () => (settingsModalVisible.value = true),
+  openSearch: openSearchInActivePane,
+  openCrossTabSearch: () => (crossTabSearchVisible.value = true),
 });
 
 const unlisteners: Array<() => void> = [];
@@ -265,6 +297,7 @@ onBeforeUnmount(() => {
             <TerminalPane
               v-for="tab in sessionStore.tabs"
               v-show="tab.sessionId === sessionStore.activeSessionId"
+              :ref="(el: any) => setTerminalPaneRef(tab.tabKey, el)"
               :key="tab.tabKey"
               :session-id="tab.sessionId"
               class="absolute inset-0"
@@ -321,6 +354,10 @@ onBeforeUnmount(() => {
     <SettingsModal v-model:visible="settingsModalVisible" />
     <UpdateDialog v-if="updateDialogVisible" @close="updateDialogVisible = false" />
     <PrivacyDialog v-if="privacyDialogVisible" @close="privacyDialogVisible = false" />
+    <CrossTabSearchDialog
+      v-model:visible="crossTabSearchVisible"
+      @jump-to-match="handleJumpToMatch"
+    />
 
     <!-- Model Catalog Update Dialog -->
     <el-dialog

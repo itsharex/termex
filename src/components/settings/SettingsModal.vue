@@ -8,6 +8,7 @@ import KeybindingsTab from "./KeybindingsTab.vue";
 import SecurityTab from "./SecurityTab.vue";
 import AiConfigTab from "./AiConfigTab.vue";
 import BackupTab from "./BackupTab.vue";
+import HighlightsTab from "./HighlightsTab.vue";
 
 const { t } = useI18n();
 const isMac = navigator.platform.toUpperCase().includes("MAC");
@@ -31,6 +32,7 @@ const tabs = computed(() => [
   { name: "appearance", label: t("settings.appearance") },
   { name: "terminal", label: t("settings.terminal") },
   { name: "keybindings", label: t("settings.keybindings") },
+  { name: "highlights", label: t("settings.highlights") },
   { name: "security", label: t("settings.security") },
   { name: "ai", label: t("settings.aiConfig") },
   { name: "backup", label: t("settings.backup") },
@@ -94,6 +96,7 @@ const tabs = computed(() => [
         <AppearanceTab v-if="activeTab === 'appearance'" />
         <TerminalTab v-else-if="activeTab === 'terminal'" />
         <KeybindingsTab v-else-if="activeTab === 'keybindings'" />
+        <HighlightsTab v-else-if="activeTab === 'highlights'" />
         <SecurityTab v-else-if="activeTab === 'security'" />
         <AiConfigTab v-else-if="activeTab === 'ai'" />
         <BackupTab v-else-if="activeTab === 'backup'" />

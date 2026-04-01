@@ -2,12 +2,14 @@ import { onUnmounted, ref, type Ref } from "vue";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { SearchAddon } from "@xterm/addon-search";
 import "@xterm/xterm/css/xterm.css";
 import { tauriInvoke, tauriListen } from "@/utils/tauri";
 import { getTerminalTheme } from "@/utils/colors";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useSessionStore } from "@/stores/sessionStore";
 import { buildFontFamilyCSS } from "@/utils/fontLoader";
+import { registerTerminal, unregisterTerminal } from "@/utils/terminalRegistry";
 
 /**
  * Composable that manages an xterm.js terminal instance
@@ -18,6 +20,7 @@ export function useTerminal(sessionId: Ref<string>) {
   let terminal: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
   let webglAddon: WebglAddon | null = null;
+  let searchAddon: SearchAddon | null = null;
   let unlistenData: (() => void) | null = null;
   let unlistenStatus: (() => void) | null = null;
   let resizeObserver: ResizeObserver | null = null;
@@ -38,6 +41,9 @@ export function useTerminal(sessionId: Ref<string>) {
 
     fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
+
+    searchAddon = new SearchAddon();
+    terminal.loadAddon(searchAddon);
 
     terminal.open(el);
 
@@ -97,6 +103,9 @@ export function useTerminal(sessionId: Ref<string>) {
 
     // Bind SSH data events
     await bindSession();
+
+    // Register terminal in global registry for cross-tab search
+    registerTerminal(sessionId.value, terminal, searchAddon);
   }
 
   /** Binds Tauri event listeners for SSH data and status. */
@@ -190,17 +199,30 @@ export function useTerminal(sessionId: Ref<string>) {
     fitAddon?.fit();
   }
 
+  /** Returns the underlying Terminal instance (for search / highlight). */
+  function getTerminal(): Terminal | null {
+    return terminal;
+  }
+
+  /** Returns the SearchAddon instance. */
+  function getSearchAddon(): SearchAddon | null {
+    return searchAddon;
+  }
+
   /** Cleans up all resources. */
   function dispose() {
+    unregisterTerminal(sessionId.value);
     unlistenData?.();
     unlistenStatus?.();
     resizeObserver?.disconnect();
     webglAddon?.dispose();
+    searchAddon?.dispose();
     fitAddon?.dispose();
     terminal?.dispose();
     terminal = null;
     fitAddon = null;
     webglAddon = null;
+    searchAddon = null;
     unlistenData = null;
     unlistenStatus = null;
     resizeObserver = null;
@@ -208,5 +230,5 @@ export function useTerminal(sessionId: Ref<string>) {
 
   onUnmounted(dispose);
 
-  return { terminalRef, mount, getDimensions, fit, setTheme, setFont, dispose };
+  return { terminalRef, mount, getDimensions, fit, setTheme, setFont, getTerminal, getSearchAddon, dispose };
 }

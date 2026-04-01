@@ -50,35 +50,47 @@ fn cache() -> &'static RwLock<HashMap<String, String>> {
 /// **Triggers at most 1 OS password prompt per app session.**
 pub fn init() -> bool {
     *AVAILABLE.get_or_init(|| {
-        let entry = match keyring::Entry::new(SERVICE_NAME, STORE_KEY) {
-            Ok(e) => e,
-            Err(_) => return false,
-        };
-        match entry.get_password() {
-            Ok(json_str) => {
-                // Parse and load into cache
-                if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&json_str) {
-                    if let Ok(mut c) = cache().write() {
-                        *c = map;
+        // In debug/dev builds, skip keychain to avoid macOS password prompts
+        // caused by unsigned binary changes on every recompile.
+        #[cfg(debug_assertions)]
+        {
+            eprintln!(">>> [KEYCHAIN] Debug build — skipping OS keychain, using in-memory store");
+            let _ = INIT_VERIFIED.set(true);
+            return true;
+        }
+
+        #[cfg(not(debug_assertions))]
+        {
+            let entry = match keyring::Entry::new(SERVICE_NAME, STORE_KEY) {
+                Ok(e) => e,
+                Err(_) => return false,
+            };
+            match entry.get_password() {
+                Ok(json_str) => {
+                    // Parse and load into cache
+                    if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&json_str) {
+                        if let Ok(mut c) = cache().write() {
+                            *c = map;
+                        }
                     }
-                }
-                // Successfully read keychain — mark as verified so verify_accessible() can skip
-                let _ = INIT_VERIFIED.set(true);
-                true
-            }
-            Err(keyring::Error::NoEntry) => {
-                // First launch: create empty store and verification token
-                if entry.set_password("{}").is_ok() {
-                    // Create verification token for future password change detection
-                    let token = uuid::Uuid::new_v4().to_string();
-                    let _ = keyring::Entry::new(SERVICE_NAME, VERIFICATION_TOKEN_KEY)
-                        .and_then(|v_entry| v_entry.set_password(&token));
+                    // Successfully read keychain — mark as verified so verify_accessible() can skip
                     let _ = INIT_VERIFIED.set(true);
-                    return true;
+                    true
                 }
-                false
+                Err(keyring::Error::NoEntry) => {
+                    // First launch: create empty store and verification token
+                    if entry.set_password("{}").is_ok() {
+                        // Create verification token for future password change detection
+                        let token = uuid::Uuid::new_v4().to_string();
+                        let _ = keyring::Entry::new(SERVICE_NAME, VERIFICATION_TOKEN_KEY)
+                            .and_then(|v_entry| v_entry.set_password(&token));
+                        let _ = INIT_VERIFIED.set(true);
+                        return true;
+                    }
+                    false
+                }
+                Err(_) => false,
             }
-            Err(_) => false,
         }
     })
 }
@@ -123,16 +135,23 @@ pub fn is_available() -> bool {
 
 /// Writes the entire in-memory cache to the single keychain entry.
 fn flush() {
-    let map = match cache().read() {
-        Ok(c) => c.clone(),
-        Err(_) => return,
-    };
-    let json_str = match serde_json::to_string(&map) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, STORE_KEY) {
-        let _ = entry.set_password(&json_str);
+    // In debug builds, credentials stay in-memory only — no OS keychain write
+    #[cfg(debug_assertions)]
+    return;
+
+    #[cfg(not(debug_assertions))]
+    {
+        let map = match cache().read() {
+            Ok(c) => c.clone(),
+            Err(_) => return,
+        };
+        let json_str = match serde_json::to_string(&map) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        if let Ok(entry) = keyring::Entry::new(SERVICE_NAME, STORE_KEY) {
+            let _ = entry.set_password(&json_str);
+        }
     }
 }
 

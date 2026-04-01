@@ -5,6 +5,8 @@ import type { ThemeMode, LanguageMode } from "@/types/settings";
 import type { CustomFont } from "@/types/fonts";
 import { DEFAULT_FONT } from "@/types/fonts";
 import { loadCustomFont, unloadCustomFont, loadAllCustomFonts } from "@/utils/fontLoader";
+import type { KeywordRule } from "@/types/search";
+import { PRESET_KEYWORD_RULES } from "@/types/search";
 
 /** Terminal color scheme preset. */
 export interface TerminalTheme {
@@ -130,6 +132,7 @@ export const useSettingsStore = defineStore("settings", () => {
   const cursorBlink = ref(true);
   const scrollbackLines = ref(5000);
   const terminalTheme = ref("termex-dark");
+  const keywordRules = ref<KeywordRule[]>([]);
 
   // ── Actions ────────────────────────────────────────────────
 
@@ -167,6 +170,13 @@ export const useSettingsStore = defineStore("settings", () => {
           break;
         case "terminalTheme":
           terminalTheme.value = value;
+          break;
+        case "keyword_highlight_rules":
+          try {
+            keywordRules.value = JSON.parse(value) as KeywordRule[];
+          } catch {
+            keywordRules.value = [];
+          }
           break;
       }
     }
@@ -256,6 +266,46 @@ export const useSettingsStore = defineStore("settings", () => {
     }
   }
 
+  // ── Keyword highlight rule management ──
+
+  /** Adds a new keyword rule. */
+  function addKeywordRule(rule: KeywordRule): void {
+    keywordRules.value = [...keywordRules.value, rule];
+  }
+
+  /** Updates an existing keyword rule. */
+  function updateKeywordRule(id: string, updates: Partial<KeywordRule>): void {
+    keywordRules.value = keywordRules.value.map((r) =>
+      r.id === id ? { ...r, ...updates } : r,
+    );
+  }
+
+  /** Removes a keyword rule. */
+  function removeKeywordRule(id: string): void {
+    keywordRules.value = keywordRules.value.filter((r) => r.id !== id);
+  }
+
+  /** Loads preset keyword rules (merges, skips existing patterns). */
+  function loadPresetKeywordRules(): KeywordRule[] {
+    const added: KeywordRule[] = [];
+    for (const preset of PRESET_KEYWORD_RULES) {
+      const exists = keywordRules.value.some(
+        (r) => r.pattern === preset.pattern,
+      );
+      if (!exists) {
+        const rule: KeywordRule = {
+          ...preset,
+          id: crypto.randomUUID(),
+        };
+        added.push(rule);
+      }
+    }
+    if (added.length > 0) {
+      keywordRules.value = [...keywordRules.value, ...added];
+    }
+    return added;
+  }
+
   // Auto-persist when values change
   watch(theme, (v) => {
     set("theme", v);
@@ -268,6 +318,7 @@ export const useSettingsStore = defineStore("settings", () => {
   watch(cursorBlink, (v) => set("cursorBlink", String(v)));
   watch(scrollbackLines, (v) => set("scrollbackLines", String(v)));
   watch(terminalTheme, (v) => set("terminalTheme", v));
+  watch(keywordRules, (v) => set("keyword_highlight_rules", JSON.stringify(v)), { deep: true });
 
   return {
     theme,
@@ -280,6 +331,7 @@ export const useSettingsStore = defineStore("settings", () => {
     cursorBlink,
     scrollbackLines,
     terminalTheme,
+    keywordRules,
     loadAll,
     set,
     applyTheme,
@@ -289,5 +341,9 @@ export const useSettingsStore = defineStore("settings", () => {
     deleteFont,
     getTerminalColors,
     getThemeList,
+    addKeywordRule,
+    updateKeywordRule,
+    removeKeywordRule,
+    loadPresetKeywordRules,
   };
 });

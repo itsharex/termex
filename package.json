@@ -1,6 +1,6 @@
 {
   "name": "termex",
-  "version": "0.4.3",
+  "version": "0.15.0",
   "description": "Open-source AI-native SSH client",
   "type": "module",
   "scripts": {
@@ -16,6 +16,7 @@
     "@element-plus/icons-vue": "^2.3.0",
     "@tauri-apps/api": "^2.0.0",
     "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-webgl": "^0.18.0",
     "@xterm/xterm": "^5.5.0",
     "element-plus": "^2.9.0",
@@ -39,6 +40,7 @@
     "tailwindcss": "^3.4.0",
     "typescript": "^5.6.0",
     "vite": "^6.0.0",
+    "vitest": "^4.1.2",
     "vue-tsc": "^2.1.0"
   }
 }

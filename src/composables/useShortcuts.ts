@@ -5,6 +5,8 @@ interface ShortcutHandlers {
   toggleSidebar: () => void;
   openNewConnection: () => void;
   openSettings: () => void;
+  openSearch?: () => void;
+  openCrossTabSearch?: () => void;
 }
 
 /**
@@ -15,6 +17,22 @@ export function useShortcuts(handlers: ShortcutHandlers) {
 
   function onKeydown(e: KeyboardEvent) {
     const mod = e.ctrlKey || e.metaKey;
+
+    // Ctrl+F / Cmd+F — search in terminal
+    if (mod && e.key === "f" && !e.shiftKey) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      handlers.openSearch?.();
+      return;
+    }
+
+    // Ctrl+Shift+F / Cmd+Shift+F — cross-tab search
+    if (mod && e.key === "f" && e.shiftKey) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      handlers.openCrossTabSearch?.();
+      return;
+    }
 
     // Ctrl+\ — toggle sidebar
     if (mod && e.key === "\\") {
