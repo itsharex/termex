@@ -173,6 +173,22 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
 
+      # ── Windows Portable ZIP ─────────────────────────────────
+      - name: Package portable ZIP (Windows)
+        if: matrix.label == 'win-x64'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $exe = "src-tauri\target\release\Termex.exe"
+          if (Test-Path $exe) {
+            Compress-Archive -Path $exe -DestinationPath "Termex_portable_win_x64.zip"
+            gh release upload "${{ github.ref_name }}" "Termex_portable_win_x64.zip" --clobber
+          } else {
+            Write-Error "Termex.exe not found at $exe"
+            exit 1
+          }
+
       # ── macOS GateKeeper fix script ─────────────────────────
       - name: Upload GateKeeper fix (macOS Intel)
         if: matrix.label == 'mac-x86_64'
@@ -259,6 +275,9 @@ jobs:
                 ;;
               *.AppImage.sig)
                 NEW_NAME="Termex_${VERSION}_linux_${ARCH}.AppImage.sig"
+                ;;
+              *portable_win_x64.zip)
+                NEW_NAME="Termex_${VERSION}_win_x64_portable.zip"
                 ;;
               *)
                 continue

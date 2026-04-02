@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use russh::client;
-use russh_keys::key;
+use russh::keys::key::PrivateKeyWithHashAlg;
+use russh::keys::PublicKey;
 
 use super::SshError;
 
@@ -17,7 +18,7 @@ impl client::Handler for ClientHandler {
     /// MVP: accepts all keys. Will be replaced with known_hosts verification.
     async fn check_server_key(
         &mut self,
-        _server_public_key: &key::PublicKey,
+        _server_public_key: &PublicKey,
     ) -> Result<bool, Self::Error> {
         Ok(true)
     }
@@ -49,9 +50,11 @@ pub async fn auth_key_data(
     passphrase: Option<&str>,
 ) -> Result<(), SshError> {
     let key_pair = russh_keys::decode_secret_key(key_data, passphrase)?;
+    let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(key_pair), None)
+        .map_err(|e| SshError::AuthFailed(e.to_string()))?;
 
     let result = handle
-        .authenticate_publickey(username, Arc::new(key_pair))
+        .authenticate_publickey(username, key_with_hash)
         .await
         .map_err(|e| SshError::AuthFailed(e.to_string()))?;
 
