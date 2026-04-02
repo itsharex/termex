@@ -108,6 +108,8 @@ src/                     # Vue 3 frontend
 - Frontend: Vitest for unit/component tests
 - Crypto module must have comprehensive test coverage
 - SSH tests use mock server where possible
+- **每次迭代/修改必须确保所有测试用例通过** — 修改结构体字段、新增 migration、改变函数签名等操作后，必须同步更新对应的测试断言值（如 migration 数量、结构体初始化字段）。CI 中测试不通过会阻止发布
+- CI 使用 `cargo test --release` 运行测试，确保与生产构建行为一致
 
 ## Performance Guidelines
 

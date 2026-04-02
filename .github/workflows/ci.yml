@@ -89,4 +89,4 @@ jobs:
 
       - name: Run tests
         working-directory: src-tauri
-        run: cargo test
+        run: cargo test --release
