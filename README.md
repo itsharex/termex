@@ -2,8 +2,11 @@
   <h1 align="center">Termex</h1>  
   <p align="center"><strong>An open-source, AI-native SSH client built with Rust.</strong></p>  
   <p align="center">Your next computer isn't a computer. It's your own Jarvis in the cloud.</p>  
-  <p align="center">Termex turns remote servers into your private AI workspace — code, deploy, and automate with AI that runs in the cloud, free from local hardware. SSH is just the wire. What flows through it is your entire workflow.</p>  
-  <p align="center">Connect from any device. Punch through any network. AI keeps working while you're offline. Reconnect, and pick up right where it left off.</p>  
+  <p align="center">Termex turns remote servers into your private AI workspace — code, deploy, </p>  
+  <p align="center">and automate with AI that runs in the cloud, free from local hardware. </p>  
+  <p align="center">SSH is just the wire. What flows through it is your entire workflow.</p>  
+  <p align="center">Connect from any device. Punch through any network. </p>  
+  <p align="center">AI keeps working while you're offline. Reconnect, and pick up right where it left off.</p>  
   <p align="center">Devices are temporary. Your workspace is permanent.</p>  
 </p>
 
