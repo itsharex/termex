@@ -139,6 +139,10 @@ pub async fn auth_password(
 
 /// Authenticates with the SSH server using a private key from content (bytes).
 /// `key_data` is the raw key file content (PEM format).
+///
+/// For RSA keys, tries multiple hash algorithms in order of preference:
+/// `rsa-sha2-256` → `rsa-sha2-512` → `ssh-rsa` (SHA-1 legacy).
+/// This ensures compatibility with both modern (OpenSSH 8.2+) and older servers.
 pub async fn auth_key_data(
     handle: &mut client::Handle<ClientHandler>,
     username: &str,
@@ -146,14 +150,36 @@ pub async fn auth_key_data(
     passphrase: Option<&str>,
 ) -> Result<(), SshError> {
     let key_pair = russh_keys::decode_secret_key(key_data, passphrase)?;
-    let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(key_pair), None)
-        .map_err(|e| SshError::AuthFailed(e.to_string()))?;
+    let key = Arc::new(key_pair);
 
+    let is_rsa = key.algorithm().is_rsa();
+    if is_rsa {
+        // Try SHA-256 first (most widely supported modern algorithm),
+        // then SHA-512, then legacy SHA-1 for old servers.
+        let hash_algs: &[Option<russh::keys::HashAlg>] = &[
+            Some(russh::keys::HashAlg::Sha256),
+            Some(russh::keys::HashAlg::Sha512),
+            None, // ssh-rsa (SHA-1) for legacy servers
+        ];
+        for hash_alg in hash_algs {
+            let key_with_hash = PrivateKeyWithHashAlg::new(Arc::clone(&key), *hash_alg)
+                .map_err(|e| SshError::AuthFailed(e.to_string()))?;
+            match handle.authenticate_publickey(username, key_with_hash).await {
+                Ok(true) => return Ok(()),
+                Ok(false) => continue,
+                Err(e) => return Err(SshError::AuthFailed(e.to_string())),
+            }
+        }
+        return Err(SshError::AuthFailed("key rejected".into()));
+    }
+
+    // Non-RSA keys (Ed25519, ECDSA): no hash algorithm needed
+    let key_with_hash = PrivateKeyWithHashAlg::new(key, None)
+        .map_err(|e| SshError::AuthFailed(e.to_string()))?;
     let result = handle
         .authenticate_publickey(username, key_with_hash)
         .await
         .map_err(|e| SshError::AuthFailed(e.to_string()))?;
-
     if !result {
         return Err(SshError::AuthFailed("key rejected".into()));
     }

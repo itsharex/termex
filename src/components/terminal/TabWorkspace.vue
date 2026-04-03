@@ -24,6 +24,18 @@ const activeSubTab = ref<"ssh" | "sftp" | "transfers">("ssh");
 const splitSubTab = ref<"sftp" | "transfers">("sftp");
 
 const sftpLayout = computed(() => settingsStore.sftpLayout ?? "tabs");
+const splitRatio = ref(0.5);
+
+// Terminal sizing: in tabs mode it fills the container; in split modes it takes a portion
+const terminalStyle = computed(() => {
+  if (sftpLayout.value === "tabs") {
+    return { width: "100%", height: "100%" };
+  } else if (sftpLayout.value === "right") {
+    return { width: `${splitRatio.value * 100}%`, height: "100%" };
+  } else {
+    return { width: "100%", height: `${splitRatio.value * 100}%` };
+  }
+});
 
 // Per-tab SFTP state (provided to child components via inject)
 const tabSftp = useTabSftp();
@@ -90,7 +102,6 @@ function handleSftpDragStart(e: MouseEvent) {
 }
 
 // Split resize
-const splitRatio = ref(0.5);
 const resizing = ref(false);
 
 function startSplitResize(e: MouseEvent) {
@@ -127,10 +138,13 @@ const cwdSyncEnabled = ref(settingsStore.cwdSync);
 let oscDispose: (() => void) | null = null;
 let lastCwd = "";
 
-// Shell snippet to inject: emits OSC 7 with $PWD before each prompt
+// Shell snippet to inject: emits OSC 7 with $PWD before each prompt.
+// Written to a temp file via exec channel (heredoc, no escaping issues), then sourced from PTY.
 const HOOK_FN = "__termex_cwd";
-const INJECT_CMD = `${HOOK_FN}(){ printf '\\033]7;%s\\007' "$PWD"; };case "$PROMPT_COMMAND" in *${HOOK_FN}*) ;; *) PROMPT_COMMAND="${HOOK_FN};\${PROMPT_COMMAND}" ;; esac`;
-const REMOVE_CMD = `PROMPT_COMMAND="\${PROMPT_COMMAND/${HOOK_FN};/}";unset -f ${HOOK_FN} 2>/dev/null`;
+const HOOK_FILE = "/tmp/.termex_cwd_hook";
+// Heredoc-based write command for exec channel — avoids all quoting/escaping issues
+const WRITE_HOOK_CMD = `cat > ${HOOK_FILE} << 'TERMEX_EOF'\n${HOOK_FN}(){ printf '\\033]7;%s\\007' "$PWD"; };case "$PROMPT_COMMAND" in *${HOOK_FN}*) ;; *) PROMPT_COMMAND="${HOOK_FN};\${PROMPT_COMMAND}" ;; esac\nTERMEX_EOF`;
+const REMOVE_CMD = `PROMPT_COMMAND="\${PROMPT_COMMAND/${HOOK_FN};/}";unset -f ${HOOK_FN} 2>/dev/null;rm -f ${HOOK_FILE}`;
 
 function writeToTerminal(text: string) {
   const bytes = new TextEncoder().encode(text);
@@ -167,24 +181,37 @@ function toggleCwdSync() {
 // Auto-activate CWD sync when shell becomes connected (if previously enabled)
 watch(isConnected, async (connected) => {
   if (connected && cwdSyncEnabled.value && !oscDispose) {
-    // Wait for terminal to be mounted and shell to be ready
     await nextTick();
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 800));
     activateCwdSync();
   }
 });
 
-function activateCwdSync() {
+async function activateCwdSync() {
   const term = terminalViewRef.value?.getTerminal();
   if (!term) return;
   lastCwd = tabSftp.getPane("right").currentPath;
-  const disposable = term.parser.registerOscHandler(7, (data: string) => {
-    const match = data.match(/^(?:file:\/\/[^/]*)?(\/.*)/);
-    if (match) onOsc7(match[1]);
-    return false;
-  });
-  oscDispose = () => disposable.dispose();
-  writeToTerminal(` ${INJECT_CMD}\n`);
+  if (!oscDispose) {
+    const disposable = term.parser.registerOscHandler(7, (data: string) => {
+      const match = data.match(/^(?:file:\/\/[^/]*)?(\/.*)/);
+      if (match) onOsc7(match[1]);
+      return false;
+    });
+    oscDispose = () => disposable.dispose();
+  }
+  // Write hook script via exec channel (invisible to terminal), then source from PTY
+  try {
+    await tauriInvoke("ssh_exec", {
+      sessionId: props.sessionId,
+      command: WRITE_HOOK_CMD,
+    });
+    // Source it — only this short command is visible (leading space = not in history)
+    writeToTerminal(` . ${HOOK_FILE}\n`);
+  } catch {
+    // exec channel unavailable — inject directly via PTY as fallback
+    const INJECT_CMD = `${HOOK_FN}(){ printf '\\033]7;%s\\007' "$PWD"; };case "$PROMPT_COMMAND" in *${HOOK_FN}*) ;; *) PROMPT_COMMAND="${HOOK_FN};\${PROMPT_COMMAND}" ;; esac`;
+    writeToTerminal(` ${INJECT_CMD}\n`);
+  }
 }
 
 onUnmounted(() => {
@@ -203,218 +230,175 @@ defineExpose({
 </script>
 
 <template>
-  <div ref="workspaceRef" class="w-full h-full flex flex-col overflow-hidden relative">
-    <!-- ═══ Tabs Mode ═══ -->
+  <div ref="workspaceRef" class="w-full h-full flex overflow-hidden relative"
+    :class="sftpLayout === 'bottom' ? 'flex-col' : 'flex-row'"
+  >
+    <!-- ═══ Terminal (always rendered once — never remounted on layout change) ═══ -->
+    <TerminalView
+      ref="terminalViewRef"
+      :session-id="sessionId"
+      class="min-w-0 min-h-0 shrink-0"
+      :style="terminalStyle"
+    />
+
+    <!-- ═══ Tabs mode: overlaid content panels ═══ -->
     <template v-if="sftpLayout === 'tabs'">
-      <!-- Sub-tab bar -->
-      <div
-        class="workspace-tab-bar flex items-stretch h-6 shrink-0 px-1 gap-0.5"
-        style="background: var(--tm-bg-surface); border-bottom: 1px solid var(--tm-border)"
+      <div v-if="activeSubTab !== 'ssh'" class="absolute inset-0" style="z-index: 5">
+        <div
+          class="workspace-tab-bar flex items-stretch h-6 shrink-0 px-1 gap-0.5"
+          style="background: var(--tm-bg-surface); border-bottom: 1px solid var(--tm-border)"
+        >
+          <button
+            v-for="tab in subTabs"
+            :key="tab.key"
+            class="workspace-tab relative"
+            :class="{ 'workspace-tab-active': activeSubTab === tab.key }"
+            @click="switchSubTab(tab.key)"
+            @mousedown.prevent="tab.key === 'sftp' ? handleSftpDragStart($event) : undefined"
+          >
+            {{ tab.label }}
+            <span
+              v-if="tab.badge > 0"
+              class="absolute -top-0.5 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
+            >
+              {{ tab.badge }}
+            </span>
+          </button>
+          <div class="flex-1" />
+          <button
+            v-if="isConnected"
+            class="cwd-sync-btn"
+            :class="{ 'cwd-sync-btn-active': cwdSyncEnabled }"
+            :title="cwdSyncEnabled ? t('sftp.cwdSyncOn') : t('sftp.cwdSyncOff')"
+            @click="toggleCwdSync"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6" />
+              <path d="M2.5 22v-6h6" />
+              <path d="M2.5 15.5A9 9 0 0 1 5.6 7.8l15.9-5.8" />
+              <path d="M21.5 8.5a9 9 0 0 1-3.1 7.7L2.5 22" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 min-h-0 relative" style="height: calc(100% - 24px)">
+          <div v-if="activeSubTab === 'sftp'" class="absolute inset-0">
+            <SftpPanel v-if="tabSftp.connected.value" />
+            <div v-else class="w-full h-full flex items-center justify-center" style="color: var(--tm-text-muted)">
+              <div class="text-center text-xs">
+                <template v-if="isConnected"><div class="animate-pulse">{{ t("sftp.connecting") }}</div></template>
+                <template v-else>{{ t("sftp.notConnected") }}</template>
+              </div>
+            </div>
+          </div>
+          <div v-if="activeSubTab === 'transfers'" class="absolute inset-0">
+            <TransfersPanel />
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- ═══ Sub-tab bar (tabs mode, always visible) ═══ -->
+    <div
+      v-if="sftpLayout === 'tabs'"
+      class="workspace-tab-bar-floating"
+    >
+      <button
+        v-for="tab in subTabs"
+        :key="tab.key"
+        class="workspace-tab relative"
+        :class="{ 'workspace-tab-active': activeSubTab === tab.key }"
+        @click="switchSubTab(tab.key)"
+        @mousedown.prevent="tab.key === 'sftp' ? handleSftpDragStart($event) : undefined"
       >
-        <button
-          v-for="tab in subTabs"
-          :key="tab.key"
-          class="workspace-tab relative"
-          :class="{ 'workspace-tab-active': activeSubTab === tab.key }"
-          @click="switchSubTab(tab.key)"
-          @mousedown.prevent="tab.key === 'sftp' ? handleSftpDragStart($event) : undefined"
+        {{ tab.label }}
+        <span
+          v-if="tab.badge > 0"
+          class="absolute -top-0.5 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
         >
-          {{ tab.label }}
-          <span
-            v-if="tab.badge > 0"
-            class="absolute -top-0.5 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
-          >
-            {{ tab.badge }}
-          </span>
-        </button>
-        <!-- Spacer + CWD Sync button (right-aligned) -->
-        <div class="flex-1" />
-        <button
-          v-if="isConnected"
-          class="cwd-sync-btn"
-          :class="{ 'cwd-sync-btn-active': cwdSyncEnabled }"
-          :title="cwdSyncEnabled ? t('sftp.cwdSyncOn') : t('sftp.cwdSyncOff')"
-          @click="toggleCwdSync"
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.5 2v6h-6" />
-            <path d="M2.5 22v-6h6" />
-            <path d="M2.5 15.5A9 9 0 0 1 5.6 7.8l15.9-5.8" />
-            <path d="M21.5 8.5a9 9 0 0 1-3.1 7.7L2.5 22" />
-          </svg>
-        </button>
-      </div>
+          {{ tab.badge }}
+        </span>
+      </button>
+      <div class="flex-1" />
+      <button
+        v-if="isConnected"
+        class="cwd-sync-btn"
+        :class="{ 'cwd-sync-btn-active': cwdSyncEnabled }"
+        :title="cwdSyncEnabled ? t('sftp.cwdSyncOn') : t('sftp.cwdSyncOff')"
+        @click="toggleCwdSync"
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6" />
+          <path d="M2.5 22v-6h6" />
+          <path d="M2.5 15.5A9 9 0 0 1 5.6 7.8l15.9-5.8" />
+          <path d="M21.5 8.5a9 9 0 0 1-3.1 7.7L2.5 22" />
+        </svg>
+      </button>
+    </div>
 
-      <!-- Content -->
-      <div class="flex-1 min-h-0 relative">
-        <TerminalView
-          ref="terminalViewRef"
-          :session-id="sessionId"
-          class="absolute inset-0"
-          :style="{ display: activeSubTab === 'ssh' ? '' : 'none' }"
-        />
-        <div v-if="activeSubTab === 'sftp'" class="absolute inset-0">
-          <SftpPanel v-if="tabSftp.connected.value" />
-          <div v-else class="w-full h-full flex items-center justify-center" style="color: var(--tm-text-muted)">
-            <div class="text-center text-xs">
-              <template v-if="isConnected"><div class="animate-pulse">{{ t("sftp.connecting") }}</div></template>
-              <template v-else>{{ t("sftp.notConnected") }}</template>
-            </div>
-          </div>
-        </div>
-        <div v-if="activeSubTab === 'transfers'" class="absolute inset-0">
-          <TransfersPanel />
-        </div>
-      </div>
-    </template>
-
-    <!-- ═══ Right Split ═══ -->
-    <template v-else-if="sftpLayout === 'right'">
-      <div class="flex-1 min-h-0 flex">
-        <TerminalView
-          ref="terminalViewRef"
-          :session-id="sessionId"
-          :style="{ width: `${splitRatio * 100}%` }"
-          class="min-w-0 shrink-0"
-        />
-        <!-- Resize handle -->
+    <!-- ═══ Split modes: resize handle + SFTP panel ═══ -->
+    <template v-if="sftpLayout === 'right' || sftpLayout === 'bottom'">
+      <!-- Resize handle -->
+      <div
+        :class="sftpLayout === 'right' ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize'"
+        class="shrink-0 transition-colors hover:bg-blue-500"
+        style="background-color: var(--tm-border)"
+        @mousedown="startSplitResize"
+      />
+      <!-- SFTP/Transfers panel -->
+      <div class="flex-1 min-w-0 min-h-0 flex flex-col">
         <div
-          class="w-1 shrink-0 cursor-col-resize transition-colors hover:bg-blue-500"
-          style="background-color: var(--tm-border)"
-          @mousedown="startSplitResize"
-        />
-        <!-- SFTP/Transfers panel -->
-        <div class="flex-1 min-w-0 flex flex-col">
-          <div
-            class="workspace-tab-bar flex items-stretch h-6 shrink-0 px-1 gap-0.5"
-            style="background: var(--tm-bg-surface); border-bottom: 1px solid var(--tm-border)"
+          class="workspace-tab-bar flex items-stretch h-6 shrink-0 px-1 gap-0.5"
+          style="background: var(--tm-bg-surface); border-bottom: 1px solid var(--tm-border)"
+        >
+          <button
+            class="workspace-tab relative"
+            :class="{ 'workspace-tab-active': splitSubTab === 'sftp' }"
+            @click="splitSubTab = 'sftp'"
+            @mousedown.prevent="handleSftpDragStart($event)"
           >
-            <button
-              class="workspace-tab relative"
-              :class="{ 'workspace-tab-active': splitSubTab === 'sftp' }"
-              @click="splitSubTab = 'sftp'"
-              @mousedown.prevent="handleSftpDragStart($event)"
+            SFTP
+          </button>
+          <button
+            class="workspace-tab relative"
+            :class="{ 'workspace-tab-active': splitSubTab === 'transfers' }"
+            @click="splitSubTab = 'transfers'"
+          >
+            {{ t("sftp.transfers") }}
+            <span
+              v-if="activeTransferCount > 0"
+              class="absolute -top-0.5 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
             >
-              SFTP
-            </button>
-            <button
-              class="workspace-tab relative"
-              :class="{ 'workspace-tab-active': splitSubTab === 'transfers' }"
-              @click="splitSubTab = 'transfers'"
-            >
-              {{ t("sftp.transfers") }}
-              <span
-                v-if="activeTransferCount > 0"
-                class="absolute -top-0.5 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
-              >
-                {{ activeTransferCount }}
-              </span>
-            </button>
-            <div class="flex-1" />
-            <button
-              v-if="isConnected"
-              class="cwd-sync-btn"
-              :class="{ 'cwd-sync-btn-active': cwdSyncEnabled }"
-              :title="cwdSyncEnabled ? t('sftp.cwdSyncOn') : t('sftp.cwdSyncOff')"
-              @click="toggleCwdSync"
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21.5 2v6h-6" />
-                <path d="M2.5 22v-6h6" />
-                <path d="M2.5 15.5A9 9 0 0 1 5.6 7.8l15.9-5.8" />
-                <path d="M21.5 8.5a9 9 0 0 1-3.1 7.7L2.5 22" />
-              </svg>
-            </button>
-          </div>
-          <div class="flex-1 min-h-0 relative">
-            <div v-show="splitSubTab === 'sftp'" class="absolute inset-0">
-              <SftpPanel v-if="tabSftp.connected.value" />
-              <div v-else class="w-full h-full flex items-center justify-center" style="color: var(--tm-text-muted)">
-                <div class="text-center text-xs">
-                  <div v-if="sftpLoading" class="animate-pulse">{{ t("sftp.connecting") }}</div>
-                  <div v-else>{{ t("sftp.notConnected") }}</div>
-                </div>
+              {{ activeTransferCount }}
+            </span>
+          </button>
+          <div class="flex-1" />
+          <button
+            v-if="isConnected"
+            class="cwd-sync-btn"
+            :class="{ 'cwd-sync-btn-active': cwdSyncEnabled }"
+            :title="cwdSyncEnabled ? t('sftp.cwdSyncOn') : t('sftp.cwdSyncOff')"
+            @click="toggleCwdSync"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6" />
+              <path d="M2.5 22v-6h6" />
+              <path d="M2.5 15.5A9 9 0 0 1 5.6 7.8l15.9-5.8" />
+              <path d="M21.5 8.5a9 9 0 0 1-3.1 7.7L2.5 22" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 min-h-0 relative">
+          <div v-show="splitSubTab === 'sftp'" class="absolute inset-0">
+            <SftpPanel v-if="tabSftp.connected.value" />
+            <div v-else class="w-full h-full flex items-center justify-center" style="color: var(--tm-text-muted)">
+              <div class="text-center text-xs">
+                <div v-if="sftpLoading" class="animate-pulse">{{ t("sftp.connecting") }}</div>
+                <div v-else>{{ t("sftp.notConnected") }}</div>
               </div>
             </div>
-            <div v-show="splitSubTab === 'transfers'" class="absolute inset-0">
-              <TransfersPanel />
-            </div>
           </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- ═══ Bottom Split ═══ -->
-    <template v-else-if="sftpLayout === 'bottom'">
-      <div class="flex-1 min-h-0 flex flex-col">
-        <TerminalView
-          ref="terminalViewRef"
-          :session-id="sessionId"
-          :style="{ height: `${splitRatio * 100}%` }"
-          class="min-h-0 shrink-0"
-        />
-        <!-- Resize handle -->
-        <div
-          class="h-1 shrink-0 cursor-row-resize transition-colors hover:bg-blue-500"
-          style="background-color: var(--tm-border)"
-          @mousedown="startSplitResize"
-        />
-        <!-- SFTP/Transfers panel -->
-        <div class="flex-1 min-h-0 flex flex-col">
-          <div
-            class="workspace-tab-bar flex items-stretch h-6 shrink-0 px-1 gap-0.5"
-            style="background: var(--tm-bg-surface); border-bottom: 1px solid var(--tm-border)"
-          >
-            <button
-              class="workspace-tab relative"
-              :class="{ 'workspace-tab-active': splitSubTab === 'sftp' }"
-              @click="splitSubTab = 'sftp'"
-              @mousedown.prevent="handleSftpDragStart($event)"
-            >
-              SFTP
-            </button>
-            <button
-              class="workspace-tab relative"
-              :class="{ 'workspace-tab-active': splitSubTab === 'transfers' }"
-              @click="splitSubTab = 'transfers'"
-            >
-              {{ t("sftp.transfers") }}
-              <span
-                v-if="activeTransferCount > 0"
-                class="absolute -top-0.5 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
-              >
-                {{ activeTransferCount }}
-              </span>
-            </button>
-            <div class="flex-1" />
-            <button
-              v-if="isConnected"
-              class="cwd-sync-btn"
-              :class="{ 'cwd-sync-btn-active': cwdSyncEnabled }"
-              :title="cwdSyncEnabled ? t('sftp.cwdSyncOn') : t('sftp.cwdSyncOff')"
-              @click="toggleCwdSync"
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21.5 2v6h-6" />
-                <path d="M2.5 22v-6h6" />
-                <path d="M2.5 15.5A9 9 0 0 1 5.6 7.8l15.9-5.8" />
-                <path d="M21.5 8.5a9 9 0 0 1-3.1 7.7L2.5 22" />
-              </svg>
-            </button>
-          </div>
-          <div class="flex-1 min-h-0 relative">
-            <div v-show="splitSubTab === 'sftp'" class="absolute inset-0">
-              <SftpPanel v-if="tabSftp.connected.value" />
-              <div v-else class="w-full h-full flex items-center justify-center" style="color: var(--tm-text-muted)">
-                <div class="text-center text-xs">
-                  <div v-if="sftpLoading" class="animate-pulse">{{ t("sftp.connecting") }}</div>
-                  <div v-else>{{ t("sftp.notConnected") }}</div>
-                </div>
-              </div>
-            </div>
-            <div v-show="splitSubTab === 'transfers'" class="absolute inset-0">
-              <TransfersPanel />
-            </div>
+          <div v-show="splitSubTab === 'transfers'" class="absolute inset-0">
+            <TransfersPanel />
           </div>
         </div>
       </div>
@@ -493,5 +477,20 @@ defineExpose({
 }
 .cwd-sync-btn-active:hover {
   color: #16a34a;
+}
+
+.workspace-tab-bar-floating {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  z-index: 4;
+  display: flex;
+  align-items: stretch;
+  padding: 0 4px;
+  gap: 2px;
+  background: var(--tm-bg-surface);
+  border-bottom: 1px solid var(--tm-border);
 }
 </style>
