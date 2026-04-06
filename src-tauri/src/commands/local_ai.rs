@@ -348,35 +348,15 @@ fn get_llama_binary_path() -> Result<PathBuf, String> {
     }
 }
 
-/// Get the ~/.termex/models/ directory, creating it if necessary.
+/// Get the models directory (portable-aware), creating it if necessary.
 fn get_models_dir() -> Result<PathBuf, String> {
-    let app_data_dir = get_app_data_dir()?;
-    let models_dir = app_data_dir.join("models");
-
+    let models_dir = crate::paths::models_dir();
     std::fs::create_dir_all(&models_dir)
         .map_err(|e| format!("Failed to create models directory: {}", e))?;
-
     Ok(models_dir)
 }
 
-/// Get the ~/.termex/ directory, using platform-specific paths.
+/// Get the app data directory (portable-aware).
 fn get_app_data_dir() -> Result<PathBuf, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let home = dirs::home_dir().ok_or("Failed to get home directory")?;
-        Ok(home.join(".termex"))
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let app_data = std::env::var("APPDATA")
-            .map_err(|_| "Failed to get APPDATA environment variable")?;
-        Ok(PathBuf::from(app_data).join("termex"))
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let home = dirs::home_dir().ok_or("Failed to get home directory")?;
-        Ok(home.join(".termex"))
-    }
+    Ok(crate::paths::app_dir())
 }

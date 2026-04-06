@@ -150,8 +150,7 @@ pub async fn start_health_check(
 
 /// Get the path to the llama-server binary based on the current platform.
 fn get_llama_binary_path() -> std::path::PathBuf {
-    let app_data_dir = get_app_data_dir();
-    let bin_dir = app_data_dir.join("bin");
+    let bin_dir = crate::paths::bin_dir();
 
     #[cfg(target_os = "macos")]
     {
@@ -179,24 +178,3 @@ fn get_llama_binary_path() -> std::path::PathBuf {
     }
 }
 
-/// Get the ~/.termex/ directory, using platform-specific paths.
-fn get_app_data_dir() -> std::path::PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("~"));
-        home.join(".termex")
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let app_data = std::env::var("APPDATA")
-            .unwrap_or_else(|_| std::path::PathBuf::from(".").to_string_lossy().to_string());
-        std::path::PathBuf::from(app_data).join("termex")
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("~"));
-        home.join(".termex")
-    }
-}

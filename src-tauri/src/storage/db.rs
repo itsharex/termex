@@ -76,10 +76,8 @@ impl Database {
         Ok(())
     }
 
-    /// Returns the default database file path.
-    /// Location: `<app_data>/termex/termex.db`
+    /// Returns the database file path (portable-aware).
     fn db_path() -> Result<PathBuf, DbError> {
-        let data_dir = dirs::data_dir().ok_or(DbError::NoDataDir)?;
-        Ok(data_dir.join("termex").join("termex.db"))
+        Ok(crate::paths::db_path())
     }
 }

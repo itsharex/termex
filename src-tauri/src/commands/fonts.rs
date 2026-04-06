@@ -14,37 +14,12 @@ pub struct CustomFont {
 /// Allowed font file extensions.
 const FONT_EXTENSIONS: &[&str] = &[".ttf", ".otf", ".woff", ".woff2"];
 
-/// Get the ~/.termex/fonts/ directory, creating it if necessary.
+/// Get the fonts directory (portable-aware), creating it if necessary.
 fn get_fonts_dir() -> Result<PathBuf, String> {
-    let app_data_dir = get_app_data_dir()?;
-    let fonts_dir = app_data_dir.join("fonts");
-
+    let fonts_dir = crate::paths::fonts_dir();
     std::fs::create_dir_all(&fonts_dir)
         .map_err(|e| format!("Failed to create fonts directory: {}", e))?;
-
     Ok(fonts_dir)
-}
-
-/// Get the ~/.termex/ directory, using platform-specific paths.
-fn get_app_data_dir() -> Result<PathBuf, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let home = dirs::home_dir().ok_or("Failed to get home directory")?;
-        Ok(home.join(".termex"))
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let app_data = std::env::var("APPDATA")
-            .map_err(|_| "Failed to get APPDATA environment variable")?;
-        Ok(PathBuf::from(app_data).join("termex"))
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let home = dirs::home_dir().ok_or("Failed to get home directory")?;
-        Ok(home.join(".termex"))
-    }
 }
 
 /// Derive a display name from the font filename.

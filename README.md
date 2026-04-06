@@ -274,6 +274,8 @@ git push origin main --tags     # triggers GitHub Actions build
 - [x] v0.19.0 -- SFTP Per-Tab (per-tab SFTP instances, drag-based layout switching, CWD sync)
 - [x] v0.20.0 -- Tor Proxy + tmux Persistent Sessions + Git Auto Sync (digital nomad remote dev workflow)
 - [x] v0.21.0 -- SSH Dynamic Port Forwarding (SOCKS5 proxy, `ssh -D` equivalent)
+- [x] v0.22.0 -- ProxyCommand Support (Cloudflare Tunnel, custom transport via `ssh -o ProxyCommand`)
+- [x] v0.23.0 -- Portable Mode (USB drive, `.portable` marker, all data relative to exe)
 
 ## Contributing
 

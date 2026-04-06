@@ -51,6 +51,11 @@ fn cache() -> &'static RwLock<HashMap<String, String>> {
 /// **Guarantees at most 1 OS password prompt per app session.**
 pub fn init() -> bool {
     *AVAILABLE.get_or_init(|| {
+        // Portable mode: skip OS keychain entirely — force AES fallback
+        if crate::paths::is_portable() {
+            return false;
+        }
+
         let entry = match keyring::Entry::new(SERVICE_NAME, STORE_KEY) {
             Ok(e) => e,
             Err(_) => return false,

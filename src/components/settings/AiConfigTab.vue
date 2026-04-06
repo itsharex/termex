@@ -24,6 +24,11 @@ const editingId = ref<string | null>(null);
 const testing = ref(false);
 const testResult = ref<{ ok: boolean; msg: string } | null>(null);
 const formContainerRef = ref<HTMLElement | null>(null);
+const isPortable = ref(false);
+
+onMounted(async () => {
+  isPortable.value = await tauriInvoke<boolean>("is_portable").catch(() => false);
+});
 
 // 定义提供商显示优先级（local 和 ollama 放在最前面）
 const PROVIDER_PRIORITY = ["local", "ollama"];
@@ -44,6 +49,11 @@ const ALL_PROVIDERS = Object.entries(PROVIDER_NAMES)
     // 其他情况保持原来的顺序
     return 0;
   });
+
+// Portable mode: hide "local" provider (models too large for USB)
+const availableProviders = computed(() =>
+  isPortable.value ? ALL_PROVIDERS.filter((p) => p.value !== "local") : ALL_PROVIDERS,
+);
 
 const form = ref<ProviderInput>({
   name: "",
@@ -467,7 +477,7 @@ async function testConnection() {
             </label>
             <el-select v-model="form.providerType" size="small" class="w-full">
               <el-option
-                v-for="pt in ALL_PROVIDERS"
+                v-for="pt in availableProviders"
                 :key="pt.value"
                 :label="pt.label"
                 :value="pt.value"
@@ -758,7 +768,7 @@ async function testConnection() {
         </label>
         <el-select v-model="form.providerType" size="small" class="w-full">
           <el-option
-            v-for="pt in ALL_PROVIDERS"
+            v-for="pt in availableProviders"
             :key="pt.value"
             :label="pt.label"
             :value="pt.value"

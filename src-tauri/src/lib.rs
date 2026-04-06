@@ -4,6 +4,7 @@ pub mod crypto;
 pub mod keychain;
 pub mod local_ai;
 pub mod local_pty;
+pub mod paths;
 pub mod plugin;
 pub mod recording;
 pub mod sftp;
@@ -148,6 +149,9 @@ pub fn run() {
             .arg("llama-server.exe")
             .output();
     }
+
+    // Initialize path resolver (detects portable mode via .portable marker file)
+    paths::init();
 
     // MVP: no master password — database is unencrypted.
     // When user sets a master password, it encrypts credential fields via AES-256-GCM.
@@ -388,6 +392,8 @@ pub fn run() {
             commands::menu::set_menu_checked,
             // Tor
             commands::tor::tor_detect,
+            // Portable
+            commands::portable::is_portable,
             // Git Sync
             commands::git_sync::git_sync_deploy,
             commands::git_sync::git_sync_setup_tunnel,

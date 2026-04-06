@@ -146,13 +146,7 @@ pub struct RecordingInfo {
     pub size: u64,
 }
 
-/// Returns the directory where recordings are stored.
+/// Returns the directory where recordings are stored (portable-aware).
 fn recordings_dir() -> Result<PathBuf, RecordingError> {
-    let data_dir = dirs::data_dir().ok_or_else(|| {
-        RecordingError::Io(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "no data directory",
-        ))
-    })?;
-    Ok(data_dir.join("termex").join("recordings"))
+    Ok(crate::paths::recordings_dir())
 }

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { useSessionStore } from "@/stores/sessionStore";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { checkStatus as updateCheckStatus } from "@/utils/update";
 import { tmuxStatusMap } from "@/composables/useTmux";
 import { gitSyncStatusMap } from "@/composables/useGitSync";
+import { tauriInvoke } from "@/utils/tauri";
 
 const emit = defineEmits<{
   (e: "open-update"): void;
@@ -12,6 +13,11 @@ const emit = defineEmits<{
 
 const sessionStore = useSessionStore();
 const portForwardStore = usePortForwardStore();
+const portable = ref(false);
+
+onMounted(async () => {
+  portable.value = await tauriInvoke<boolean>("is_portable").catch(() => false);
+});
 
 const activeForwardCount = computed(() => portForwardStore.activeForwards.size);
 
@@ -66,6 +72,11 @@ const statusColor = computed(() => {
     class="h-6 flex items-center px-3 text-xs shrink-0 select-none"
     style="background: var(--tm-statusbar-bg); border-top: 1px solid var(--tm-border)"
   >
+    <span
+      v-if="portable"
+      class="text-[10px] px-1.5 py-0.5 rounded font-mono mr-2 text-amber-400"
+      style="background: rgba(245, 158, 11, 0.15)"
+    >USB</span>
     <span :class="statusColor">{{ statusText }}</span>
 
     <!-- tmux indicator -->
