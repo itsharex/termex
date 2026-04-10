@@ -12,9 +12,9 @@ import type { Keybinding, KeybindingAction } from "@/types/keybindings";
 
 describe("Keybindings Types", () => {
   describe("DEFAULT_KEYBINDINGS", () => {
-    it("has all 18 actions defined", () => {
+    it("has all 19 actions defined", () => {
       const actions = Object.keys(DEFAULT_KEYBINDINGS);
-      expect(actions).toHaveLength(18);
+      expect(actions).toHaveLength(19);
     });
 
     it("includes v0.15.0 search actions", () => {
@@ -40,10 +40,10 @@ describe("Keybindings Types", () => {
   });
 
   describe("KEYBINDING_ACTIONS", () => {
-    it("contains all 18 actions in order", () => {
-      expect(KEYBINDING_ACTIONS).toHaveLength(18);
+    it("contains all 19 actions in order", () => {
+      expect(KEYBINDING_ACTIONS).toHaveLength(19);
       expect(KEYBINDING_ACTIONS[0]).toBe("newConnection");
-      expect(KEYBINDING_ACTIONS[KEYBINDING_ACTIONS.length - 1]).toBe("goToTab9");
+      expect(KEYBINDING_ACTIONS[KEYBINDING_ACTIONS.length - 1]).toBe("toggleMonitor");
     });
 
     it("matches the keys in DEFAULT_KEYBINDINGS", () => {

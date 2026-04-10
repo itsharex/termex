@@ -146,6 +146,15 @@ export const useSettingsStore = defineStore("settings", () => {
   const autocompleteMinChars = ref(2);
   const autocompletePreferLocal = ref(true);
 
+  // Monitor settings
+  const monitorInterval = ref(3000);
+  const monitorAutoStart = ref(false);
+  const monitorShowCpu = ref(true);
+  const monitorShowMemory = ref(true);
+  const monitorShowDisk = ref(true);
+  const monitorShowNetwork = ref(true);
+  const monitorShowProcesses = ref(true);
+
   // ── Actions ────────────────────────────────────────────────
 
   /** Loads all settings from the database. */
@@ -218,6 +227,27 @@ export const useSettingsStore = defineStore("settings", () => {
           break;
         case "autocompletePreferLocal":
           autocompletePreferLocal.value = value === "true";
+          break;
+        case "monitorInterval":
+          monitorInterval.value = Number(value) || 3000;
+          break;
+        case "monitorAutoStart":
+          monitorAutoStart.value = value === "true";
+          break;
+        case "monitorShowCpu":
+          monitorShowCpu.value = value !== "false";
+          break;
+        case "monitorShowMemory":
+          monitorShowMemory.value = value !== "false";
+          break;
+        case "monitorShowDisk":
+          monitorShowDisk.value = value !== "false";
+          break;
+        case "monitorShowNetwork":
+          monitorShowNetwork.value = value !== "false";
+          break;
+        case "monitorShowProcesses":
+          monitorShowProcesses.value = value !== "false";
           break;
       }
     }
@@ -412,6 +442,13 @@ export const useSettingsStore = defineStore("settings", () => {
   watch(autocompleteDebounceMs, (v) => set("autocompleteDebounceMs", String(v)));
   watch(autocompleteMinChars, (v) => set("autocompleteMinChars", String(v)));
   watch(autocompletePreferLocal, (v) => set("autocompletePreferLocal", String(v)));
+  watch(monitorInterval, (v) => set("monitorInterval", String(v)));
+  watch(monitorAutoStart, (v) => set("monitorAutoStart", String(v)));
+  watch(monitorShowCpu, (v) => set("monitorShowCpu", String(v)));
+  watch(monitorShowMemory, (v) => set("monitorShowMemory", String(v)));
+  watch(monitorShowDisk, (v) => set("monitorShowDisk", String(v)));
+  watch(monitorShowNetwork, (v) => set("monitorShowNetwork", String(v)));
+  watch(monitorShowProcesses, (v) => set("monitorShowProcesses", String(v)));
 
   return {
     theme,
@@ -433,6 +470,13 @@ export const useSettingsStore = defineStore("settings", () => {
     autocompleteDebounceMs,
     autocompleteMinChars,
     autocompletePreferLocal,
+    monitorInterval,
+    monitorAutoStart,
+    monitorShowCpu,
+    monitorShowMemory,
+    monitorShowDisk,
+    monitorShowNetwork,
+    monitorShowProcesses,
     loadAll,
     set,
     applyTheme,

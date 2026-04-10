@@ -17,7 +17,8 @@ export type KeybindingAction =
   | "goToTab6"
   | "goToTab7"
   | "goToTab8"
-  | "goToTab9";
+  | "goToTab9"
+  | "toggleMonitor";
 
 /** A keyboard shortcut composed of modifier keys + a main key. */
 export interface Keybinding {
@@ -54,6 +55,7 @@ export const KEYBINDING_ACTIONS: KeybindingAction[] = [
   "goToTab7",
   "goToTab8",
   "goToTab9",
+  "toggleMonitor",
 ];
 
 /** Default keybinding mapping. */
@@ -76,6 +78,7 @@ export const DEFAULT_KEYBINDINGS: KeybindingMap = {
   goToTab7:       { mod: true, shift: false, alt: false, key: "7" },
   goToTab8:       { mod: true, shift: false, alt: false, key: "8" },
   goToTab9:       { mod: true, shift: false, alt: false, key: "9" },
+  toggleMonitor:  { mod: true, shift: true,  alt: false, key: "m" },
 };
 
 /** System-reserved shortcuts that cannot be rebound. */

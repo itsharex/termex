@@ -24,6 +24,8 @@
 
 ![](https://raw.githubusercontent.com/zouwei/resource/master/images/moraya/20260402-141840.-image.png)
 
+![](https://raw.githubusercontent.com/zouwei/resource/master/images/moraya/20260410-101142.-image.png)
+
 ## Why Termex?
 
 |  | Termius | Tabby | WindTerm | Termex |
@@ -277,11 +279,11 @@ git push origin main --tags     # triggers GitHub Actions build
 - [x] v0.24.0 -- Connection Chain (multi-hop any-order, SOCKS5 exit routing)
 - [x] v0.25.0 -- Security Compliance (GDPR / ISO 27001 / GB/T 22239, audit logging)
 - [x] v0.26.0 -- AI Smart Autocomplete (inline ghost text, context-aware, local AI priority)
+- [x] v0.27.0 -- **SSH Config Import + Snippet Manager** (one-click `~/.ssh/config` import, command snippets with variable templates, quick palette)
+- [x] v0.28.0 -- **Server Monitoring Dashboard** (real-time CPU/Memory/Disk/Network via SSH exec, process Top N, sparkline charts, threshold alerts)
 
 ### Desktop — Planned
 
-- [ ] v0.27.0 -- **SSH Config Import + Snippet Manager** (one-click `~/.ssh/config` import, command snippets with variable templates, quick palette)
-- [ ] v0.28.0 -- **Server Monitoring Dashboard** (real-time CPU/Memory/Disk/Network via SSH exec, process Top N, sparkline charts, threshold alerts)
 - [ ] v0.29.0 -- **Session Recording + AI Summary** (asciicast v2 record/playback, speed control, AI-generated session summary)
 - [ ] v0.30.0 -- **Team Collaboration v1** (Git-based config sharing, team encryption, selective sharing, role-based access)
 - [ ] v0.31.0 -- **AI Operations Assistant** (context-aware chat, error auto-diagnosis, multi-turn troubleshooting, command orchestration)

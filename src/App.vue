@@ -202,6 +202,10 @@ useShortcuts({
   openSettings: () => dedupAction("settings", () => { settingsModalVisible.value = true; }),
   openSearch: openSearchInActivePane,
   openCrossTabSearch: () => (crossTabSearchVisible.value = true),
+  toggleMonitor: () => {
+    // Emit a custom event that TabWorkspace listens to
+    window.dispatchEvent(new CustomEvent("termex:toggle-monitor"));
+  },
 });
 
 const unlisteners: Array<() => void> = [];

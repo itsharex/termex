@@ -6,6 +6,7 @@ use zeroize::Zeroizing;
 
 use crate::keychain;
 use crate::local_ai::LlamaServerState;
+use crate::monitor::{CollectorState, MetricsHistory};
 use crate::plugin::registry::PluginRegistry;
 use crate::recording::recorder::RecorderRegistry;
 use crate::sftp::session::SftpHandle;
@@ -56,6 +57,10 @@ pub struct AppState {
     pub reverse_forward_registry: SharedReverseForwardRegistry,
     /// Pending host key decisions: session_id → oneshot sender for user's trust decision.
     pub pending_host_key_decisions: TokioRwLock<HashMap<String, oneshot::Sender<bool>>>,
+    /// Active monitor collectors, keyed by session_id.
+    pub monitor_collectors: TokioRwLock<HashMap<String, CollectorState>>,
+    /// Monitor metrics history, keyed by session_id.
+    pub monitor_history: TokioRwLock<HashMap<String, Arc<TokioRwLock<MetricsHistory>>>>,
 }
 
 impl AppState {
@@ -79,6 +84,8 @@ impl AppState {
             proxy_sessions: Arc::new(TokioRwLock::new(HashMap::new())), // ProxyJump bastion pool
             reverse_forward_registry: reverse_forward::new_shared_registry(),
             pending_host_key_decisions: TokioRwLock::new(HashMap::new()),
+            monitor_collectors: TokioRwLock::new(HashMap::new()),
+            monitor_history: TokioRwLock::new(HashMap::new()),
         };
 
         // Initialize keychain (reads single store entry → at most 1 OS prompt)

@@ -5,6 +5,7 @@ pub mod crypto;
 pub mod keychain;
 pub mod local_ai;
 pub mod local_pty;
+pub mod monitor;
 pub mod paths;
 pub mod plugin;
 pub mod recording;
@@ -188,6 +189,16 @@ pub fn run() {
             // Clean up old audit logs (90 day retention)
             crate::audit::cleanup(&state.db, 90);
 
+            // On Windows/Linux: remove native decorations — the custom HTML titlebar
+            // in TerminalTabs.vue provides window controls (min/max/close) and drag.
+            // On macOS: keep decorations + Overlay mode (traffic lights handled natively).
+            #[cfg(not(target_os = "macos"))]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_decorations(false);
+                }
+            }
+
             let app_menu = build_menu(app)?;
             app.set_menu(app_menu.menu)?;
 
@@ -241,8 +252,15 @@ pub fn run() {
                 std::thread::spawn(move || {
                     let rt = tokio::runtime::Runtime::new().unwrap();
                     rt.block_on(async {
-                        // Stop all port forwards
+                        // Stop all port forwards and monitors
                         if let Some(state) = handle.try_state::<AppState>() {
+                            // Stop all monitor collectors
+                            let mut collectors = state.monitor_collectors.write().await;
+                            for (_, collector) in collectors.drain() {
+                                let _ = collector.cmd_tx.send(monitor::CollectorCommand::Stop);
+                            }
+                            drop(collectors);
+
                             let mut fwd = state.forwards.write().await;
                             for (_, active) in fwd.drain() {
                                 active.stop();
@@ -434,6 +452,11 @@ pub fn run() {
             commands::ssh_config::ssh_config_import,
             commands::ssh_config::ssh_config_import_termius,
             commands::ssh_config::ssh_config_import_csv,
+            // Monitor
+            commands::monitor::monitor_start,
+            commands::monitor::monitor_stop,
+            commands::monitor::monitor_get_latest,
+            commands::monitor::monitor_get_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Termex");

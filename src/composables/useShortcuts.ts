@@ -13,6 +13,7 @@ interface ShortcutHandlers {
   openSearch?: () => void;
   openCrossTabSearch?: () => void;
   openSnippetPalette?: () => void;
+  toggleMonitor?: () => void;
 }
 
 /**
@@ -34,6 +35,7 @@ export function useShortcuts(handlers: ShortcutHandlers) {
     prevTab: () => cycleTab(-1),
     search: () => handlers.openSearch?.(),
     searchAllTabs: () => handlers.openCrossTabSearch?.(),
+    toggleMonitor: () => handlers.toggleMonitor?.(),
   };
 
   function onKeydown(e: KeyboardEvent) {

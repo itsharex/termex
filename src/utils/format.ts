@@ -18,3 +18,26 @@ export function formatDuration(seconds: number): string {
   const m = Math.floor((seconds % 3600) / 60);
   return `${h}h ${m}m`;
 }
+
+/** Alias for formatFileSize — clearer semantics for monitor usage. */
+export const formatBytes = formatFileSize;
+
+/**
+ * Format byte rate as human-readable (e.g., "1.2 MB/s").
+ */
+export function formatBytesPerSec(bytesPerSec: number): string {
+  return `${formatFileSize(bytesPerSec)}/s`;
+}
+
+/**
+ * Format uptime seconds as human-readable (e.g., "45d 12h", "3h 25m").
+ */
+export function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}

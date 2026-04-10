@@ -4,7 +4,10 @@ import { useI18n } from "vue-i18n";
 import { ElMessageBox } from "element-plus";
 import { Monitor } from "@element-plus/icons-vue";
 import { useServerStore } from "@/stores/serverStore";
+import { useSessionStore } from "@/stores/sessionStore";
+import { useMonitorStore } from "@/stores/monitorStore";
 import { useConfigExport } from "@/composables/useConfigExport";
+import { formatUptime } from "@/utils/format";
 import type { Server, ServerInput } from "@/types/server";
 import { tauriInvoke } from "@/utils/tauri";
 import ContextMenu from "./ContextMenu.vue";
@@ -12,7 +15,40 @@ import type { MenuItem } from "./ContextMenu.vue";
 
 const { t } = useI18n();
 const serverStore = useServerStore();
+const sessionStore = useSessionStore();
+const monitorStore = useMonitorStore();
 const { exportConfig } = useConfigExport();
+
+// Health status indicator from monitor data
+const monitorSessionId = computed(() => {
+  for (const [sid, session] of sessionStore.sessions) {
+    if (session.serverId === props.server.id && session.status === "connected") {
+      return sid;
+    }
+  }
+  return null;
+});
+
+const monitorMetrics = computed(() => {
+  const sid = monitorSessionId.value;
+  return sid ? monitorStore.getLatest(sid) : undefined;
+});
+
+const healthColor = computed(() => {
+  const m = monitorMetrics.value;
+  if (!m) return "";
+  const cpuPct = m.cpu.usagePercent;
+  const maxDiskPct = Math.max(...m.disk.map((d) => d.usagePercent), 0);
+  if (cpuPct >= 95 || maxDiskPct >= 95) return "#f56c6c";
+  if (cpuPct >= 80 || maxDiskPct >= 90) return "#e6a23c";
+  return "#67c23a";
+});
+
+const healthTooltip = computed(() => {
+  const m = monitorMetrics.value;
+  if (!m) return "";
+  return `CPU: ${m.cpu.usagePercent.toFixed(1)}% | MEM: ${m.memory.usagePercent.toFixed(1)}% | Up: ${formatUptime(m.uptimeSeconds)}`;
+});
 
 const props = defineProps<{
   server: Server;
@@ -264,7 +300,10 @@ function handleDblClick() {
     @mousemove="onMouseMove"
     @mouseleave="onMouseLeave"
   >
-    <el-icon :size="12" class="shrink-0" style="color: var(--tm-text-muted)"><Monitor /></el-icon>
+    <el-tooltip v-if="healthColor" :content="healthTooltip" placement="right" :show-after="500">
+      <span class="health-dot" :style="{ backgroundColor: healthColor }" />
+    </el-tooltip>
+    <el-icon v-else :size="12" class="shrink-0" style="color: var(--tm-text-muted)"><Monitor /></el-icon>
 
     <!-- Inline rename input -->
     <input

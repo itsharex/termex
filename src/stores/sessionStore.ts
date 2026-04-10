@@ -144,6 +144,12 @@ export const useSessionStore = defineStore("session", () => {
     // Mark as deliberate so auto-reconnect does not trigger
     deliberateDisconnects.value.add(sessionId);
 
+    // Clean up monitor state
+    try {
+      const { useMonitorStore } = await import("@/stores/monitorStore");
+      useMonitorStore().cleanup(sessionId);
+    } catch { /* ignore if monitor store not available */ }
+
     if (sessionId.startsWith("local-")) {
       try {
         await tauriInvoke("local_pty_close", { sessionId });
@@ -172,6 +178,12 @@ export const useSessionStore = defineStore("session", () => {
   ): Promise<void> {
     const oldSession = sessions.value.get(oldSessionId);
     if (!oldSession) return;
+
+    // Clean up old session's monitor state
+    try {
+      const { useMonitorStore } = await import("@/stores/monitorStore");
+      useMonitorStore().cleanup(oldSessionId);
+    } catch { /* ignore */ }
 
     const { serverId, serverName, startedAt } = oldSession;
 

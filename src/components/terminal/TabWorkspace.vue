@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useSessionStore } from "@/stores/sessionStore";
@@ -9,6 +9,8 @@ import { tauriInvoke } from "@/utils/tauri";
 import TerminalView from "./TerminalView.vue";
 import SftpPanel from "@/components/sftp/SftpPanel.vue";
 import TransfersPanel from "@/components/sftp/TransfersPanel.vue";
+import MonitorPanel from "@/components/monitor/MonitorPanel.vue";
+import { useMonitorStore } from "@/stores/monitorStore";
 
 const props = defineProps<{
   sessionId: string;
@@ -20,11 +22,15 @@ const sessionStore = useSessionStore();
 
 const terminalViewRef = ref<InstanceType<typeof TerminalView>>();
 const workspaceRef = ref<HTMLElement>();
-const activeSubTab = ref<"ssh" | "sftp" | "transfers">("ssh");
-const splitSubTab = ref<"sftp" | "transfers">("sftp");
+const monitorStore = useMonitorStore();
+const activeSubTab = ref<"ssh" | "sftp" | "transfers" | "monitor">("ssh");
+const splitSubTab = ref<"sftp" | "transfers" | "monitor">("sftp");
+/** Which panel group occupies the split area: sftp(+transfers) or monitor */
+const splitPanelGroup = ref<"sftp" | "monitor">("sftp");
 
 const sftpLayout = computed(() => settingsStore.sftpLayout ?? "tabs");
-const showFloatingTabBar = computed(() => !isLocal.value && sftpLayout.value === "tabs");
+// Floating tab bar: always visible for SSH sessions (filtered in split mode)
+const showFloatingTabBar = computed(() => !isLocal.value);
 const splitRatio = ref(0.5);
 
 // Terminal sizing: local sessions always fullscreen; SSH depends on layout
@@ -59,8 +65,15 @@ watch(activeSubTab, async (tab) => {
 // When layout changes from tabs to split, open SFTP if needed
 watch(sftpLayout, async (layout) => {
   if (layout !== "tabs") {
-    await ensureSftpOpen();
-    activeSubTab.value = "ssh"; // reset sub-tab in case it was on sftp
+    // Use the drag source to determine which panel group goes to split
+    splitPanelGroup.value = pendingDragGroup;
+    if (pendingDragGroup === "monitor") {
+      splitSubTab.value = "monitor";
+    } else {
+      splitSubTab.value = activeSubTab.value === "transfers" ? "transfers" : "sftp";
+      await ensureSftpOpen();
+    }
+    activeSubTab.value = "ssh";
   }
   await nextTick();
   terminalViewRef.value?.fit();
@@ -71,7 +84,37 @@ watch(isConnected, async (connected) => {
   if (connected && sftpLayout.value !== "tabs") {
     await ensureSftpOpen();
   }
+  // Auto-start monitor if the monitor panel is currently visible
+  if (connected && !isLocal.value) {
+    const monitorVisible = sftpLayout.value === "tabs"
+      ? activeSubTab.value === "monitor"
+      : splitSubTab.value === "monitor";
+    if (monitorVisible || settingsStore.monitorAutoStart) {
+      await ensureMonitorStarted();
+      if (settingsStore.monitorAutoStart && sftpLayout.value !== "tabs") {
+        splitSubTab.value = "monitor";
+      }
+    }
+  }
 });
+
+// Auto-start monitor when user switches to monitor tab
+watch(activeSubTab, async (tab) => {
+  if (tab === "monitor" && isConnected.value && !isLocal.value) {
+    await ensureMonitorStarted();
+  }
+});
+watch(splitSubTab, async (tab) => {
+  if (tab === "monitor" && isConnected.value && !isLocal.value) {
+    await ensureMonitorStarted();
+  }
+});
+
+async function ensureMonitorStarted() {
+  if (!monitorStore.isCollecting(props.sessionId)) {
+    await monitorStore.start(props.sessionId, settingsStore.monitorInterval);
+  }
+}
 
 async function ensureSftpOpen() {
   if (!tabSftp.connected.value && isConnected.value) {
@@ -85,23 +128,35 @@ const sftpLoading = computed(() => isConnected.value && !tabSftp.connected.value
 // Transfer badge count
 const activeTransferCount = computed(() => tabSftp.activeTransfers.value.length);
 
-// Sub-tab config for tabs mode
-const subTabs = computed(() => [
-  { key: "ssh" as const, label: "SSH", badge: 0 },
-  { key: "sftp" as const, label: "SFTP", badge: 0 },
-  { key: "transfers" as const, label: t("sftp.transfers"), badge: activeTransferCount.value },
-]);
+// Floating tab bar items — filtered in split mode to hide tabs already in split area
+const subTabs = computed(() => {
+  const all = [
+    { key: "ssh" as const, label: "SSH", badge: 0, group: null as "sftp" | "monitor" | null },
+    { key: "sftp" as const, label: "SFTP", badge: 0, group: "sftp" as const },
+    { key: "transfers" as const, label: t("sftp.transfers"), badge: activeTransferCount.value, group: "sftp" as const },
+    { key: "monitor" as const, label: "Monitor", badge: 0, group: "monitor" as const },
+  ];
+  // In split mode, hide tabs that belong to the panel group already in the split area
+  if (sftpLayout.value !== "tabs") {
+    return all.filter(t => t.group !== splitPanelGroup.value);
+  }
+  return all;
+});
 
-function switchSubTab(key: "ssh" | "sftp" | "transfers") {
+function switchSubTab(key: "ssh" | "sftp" | "transfers" | "monitor") {
   activeSubTab.value = key;
 }
 
 // Drag handler (unified for all modes)
-function handleSftpDragStart(e: MouseEvent) {
+let pendingDragGroup: "sftp" | "monitor" = "sftp";
+
+function handlePanelDragStart(e: MouseEvent, group: "sftp" | "monitor") {
+  pendingDragGroup = group;
   if (workspaceRef.value) {
     startDrag(e, workspaceRef.value);
   }
 }
+
 
 // Split resize
 const resizing = ref(false);
@@ -219,9 +274,22 @@ async function activateCwdSync() {
   }
 }
 
+// Toggle monitor panel via global shortcut (only respond for active tab)
+function onToggleMonitor() {
+  if (sessionStore.activeSessionId !== props.sessionId) return;
+  if (isLocal.value) return;
+  // Toggle monitor: if already showing, go back to SSH; otherwise show monitor overlay
+  activeSubTab.value = activeSubTab.value === "monitor" ? "ssh" : "monitor";
+}
+
+onMounted(() => {
+  window.addEventListener("termex:toggle-monitor", onToggleMonitor);
+});
+
 onUnmounted(() => {
   oscDispose?.();
   oscDispose = null;
+  window.removeEventListener("termex:toggle-monitor", onToggleMonitor);
 });
 
 defineExpose({
@@ -247,9 +315,9 @@ defineExpose({
       :style="{ ...terminalStyle, paddingTop: showFloatingTabBar ? '24px' : '0' }"
     />
 
-    <!-- ═══ Tabs mode: overlaid content panels ═══ -->
-    <template v-if="!isLocal && sftpLayout === 'tabs'">
-      <div v-if="activeSubTab !== 'ssh'" class="absolute inset-0" style="z-index: 5">
+    <!-- ═══ Overlaid content panels (tabs mode, or non-split panels in split mode) ═══ -->
+    <template v-if="!isLocal">
+      <div v-if="activeSubTab !== 'ssh'" class="absolute inset-0" style="z-index: 5; background: var(--tm-bg-surface)">
         <div
           class="workspace-tab-bar flex items-stretch h-6 shrink-0 px-1 gap-0.5"
           style="background: var(--tm-bg-surface); border-bottom: 1px solid var(--tm-border)"
@@ -260,7 +328,7 @@ defineExpose({
             class="workspace-tab relative"
             :class="{ 'workspace-tab-active': activeSubTab === tab.key }"
             @click="switchSubTab(tab.key)"
-            @mousedown.prevent="tab.key === 'sftp' ? handleSftpDragStart($event) : undefined"
+            @mousedown.prevent="tab.key === 'sftp' ? handlePanelDragStart($event, 'sftp') : tab.key === 'monitor' ? handlePanelDragStart($event, 'monitor') : undefined"
           >
             {{ tab.label }}
             <span
@@ -299,13 +367,16 @@ defineExpose({
           <div v-if="activeSubTab === 'transfers'" class="absolute inset-0">
             <TransfersPanel />
           </div>
+          <div v-if="activeSubTab === 'monitor'" class="absolute inset-0 overflow-y-auto">
+            <MonitorPanel :session-id="sessionId" />
+          </div>
         </div>
       </div>
     </template>
 
-    <!-- ═══ Sub-tab bar (tabs mode, always visible) ═══ -->
+    <!-- ═══ Sub-tab bar (floating, always visible for SSH sessions) ═══ -->
     <div
-      v-if="!isLocal && sftpLayout === 'tabs'"
+      v-if="showFloatingTabBar"
       class="workspace-tab-bar-floating"
     >
       <button
@@ -314,7 +385,7 @@ defineExpose({
         class="workspace-tab relative"
         :class="{ 'workspace-tab-active': activeSubTab === tab.key }"
         @click="switchSubTab(tab.key)"
-        @mousedown.prevent="tab.key === 'sftp' ? handleSftpDragStart($event) : undefined"
+        @mousedown.prevent="tab.key === 'sftp' ? handlePanelDragStart($event, 'sftp') : tab.key === 'monitor' ? handlePanelDragStart($event, 'monitor') : undefined"
       >
         {{ tab.label }}
         <span
@@ -356,27 +427,39 @@ defineExpose({
           class="workspace-tab-bar flex items-stretch h-6 shrink-0 px-1 gap-0.5"
           style="background: var(--tm-bg-surface); border-bottom: 1px solid var(--tm-border)"
         >
-          <button
-            class="workspace-tab relative"
-            :class="{ 'workspace-tab-active': splitSubTab === 'sftp' }"
-            @click="splitSubTab = 'sftp'"
-            @mousedown.prevent="handleSftpDragStart($event)"
-          >
-            SFTP
-          </button>
-          <button
-            class="workspace-tab relative"
-            :class="{ 'workspace-tab-active': splitSubTab === 'transfers' }"
-            @click="splitSubTab = 'transfers'"
-          >
-            {{ t("sftp.transfers") }}
-            <span
-              v-if="activeTransferCount > 0"
-              class="absolute -top-0.5 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
+          <!-- SFTP group tabs -->
+          <template v-if="splitPanelGroup === 'sftp'">
+            <button
+              class="workspace-tab relative"
+              :class="{ 'workspace-tab-active': splitSubTab === 'sftp' }"
+              @click="splitSubTab = 'sftp'"
+              @mousedown.prevent="handlePanelDragStart($event, 'sftp')"
             >
-              {{ activeTransferCount }}
-            </span>
-          </button>
+              SFTP
+            </button>
+            <button
+              class="workspace-tab relative"
+              :class="{ 'workspace-tab-active': splitSubTab === 'transfers' }"
+              @click="splitSubTab = 'transfers'"
+            >
+              {{ t("sftp.transfers") }}
+              <span
+                v-if="activeTransferCount > 0"
+                class="absolute -top-0.5 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
+              >
+                {{ activeTransferCount }}
+              </span>
+            </button>
+          </template>
+          <!-- Monitor group tab -->
+          <template v-else>
+            <button
+              class="workspace-tab workspace-tab-active"
+              @mousedown.prevent="handlePanelDragStart($event, 'monitor')"
+            >
+              Monitor
+            </button>
+          </template>
           <div class="flex-1" />
           <button
             v-if="isConnected"
@@ -405,6 +488,9 @@ defineExpose({
           </div>
           <div v-show="splitSubTab === 'transfers'" class="absolute inset-0">
             <TransfersPanel />
+          </div>
+          <div v-show="splitSubTab === 'monitor'" class="absolute inset-0 overflow-y-auto">
+            <MonitorPanel :session-id="sessionId" />
           </div>
         </div>
       </div>

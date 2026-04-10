@@ -24,3 +24,4 @@ pub mod portable;
 pub mod privacy;
 pub mod snippet;
 pub mod ssh_config;
+pub mod monitor;

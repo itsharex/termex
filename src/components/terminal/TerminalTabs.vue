@@ -9,19 +9,25 @@ import type { MenuItem } from "@/components/sidebar/ContextMenu.vue";
 
 const { t } = useI18n();
 const appWindow = getCurrentWindow();
+const isMac = navigator.platform.toUpperCase().includes("MAC");
 
 function handleTitlebarMouseDown(e: MouseEvent) {
   if (e.button !== 0) return;
   if ((e.target as HTMLElement).closest("button")) return;
   if ((e.target as HTMLElement).closest(".tab-btn")) return;
+  if ((e.target as HTMLElement).closest(".window-ctrl")) return;
 
   if (e.detail >= 2) {
-    // Double-click: maximize/restore
     appWindow.toggleMaximize();
   } else {
-    // Single click: start drag
     appWindow.startDragging();
   }
+}
+
+function handleWindowControl(action: "minimize" | "maximize" | "close") {
+  if (action === "minimize") appWindow.minimize();
+  else if (action === "maximize") appWindow.toggleMaximize();
+  else appWindow.close();
 }
 
 const props = defineProps<{
@@ -29,7 +35,6 @@ const props = defineProps<{
   sidebarWidth?: number;
 }>();
 
-const isMac = navigator.platform.toUpperCase().includes("MAC");
 // macOS: when sidebar open, match actual sidebar width; otherwise traffic light width (78px)
 // Windows/Linux: no spacer needed
 const spacerWidth = computed(() => {
@@ -232,6 +237,29 @@ async function onCtxSelect(action: string) {
     >
       <el-icon :size="14"><Setting /></el-icon>
     </button>
+
+    <!-- Window controls for Windows/Linux (no native titlebar) -->
+    <template v-if="!isMac">
+      <div class="w-px h-4 mx-1 shrink-0" style="background: var(--tm-border)" />
+      <button
+        class="window-ctrl hover:bg-white/10 w-[46px] h-full flex items-center justify-center transition-colors"
+        @click="handleWindowControl('minimize')"
+      >
+        <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor"><rect width="10" height="1" /></svg>
+      </button>
+      <button
+        class="window-ctrl hover:bg-white/10 w-[46px] h-full flex items-center justify-center transition-colors"
+        @click="handleWindowControl('maximize')"
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9" /></svg>
+      </button>
+      <button
+        class="window-ctrl hover:bg-red-500 hover:text-white w-[46px] h-full flex items-center justify-center transition-colors"
+        @click="handleWindowControl('close')"
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.2"><line x1="0" y1="0" x2="10" y2="10" /><line x1="10" y1="0" x2="0" y2="10" /></svg>
+      </button>
+    </template>
 
     <!-- Tab context menu -->
     <ContextMenu

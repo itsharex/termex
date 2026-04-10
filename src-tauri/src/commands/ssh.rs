@@ -443,6 +443,9 @@ pub async fn ssh_disconnect(
         },
     );
 
+    // Stop monitor collection if active
+    super::monitor::monitor_stop_inner(&state, &session_id).await;
+
     // Also close SFTP session if open
     {
         let mut sftp_sessions = state.sftp_sessions.write().await;
