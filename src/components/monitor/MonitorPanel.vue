@@ -15,7 +15,7 @@ const props = defineProps<{
 
 const sessionIdRef = computed(() => props.sessionId);
 const settings = useSettingsStore();
-const { latest, history, osInfo, stop } =
+const { isCollecting, latest, history, osInfo, start, stop } =
   useMonitor(sessionIdRef);
 
 const processSort = ref<"cpu" | "mem">("cpu");
@@ -24,12 +24,20 @@ const uptimeText = computed(() => {
   if (!latest.value) return "";
   return formatUptime(latest.value.uptimeSeconds);
 });
+
+async function handleToggle() {
+  if (isCollecting.value) {
+    await stop();
+  } else {
+    await start();
+  }
+}
 </script>
 
 <template>
   <div class="monitor-panel">
     <template v-if="latest">
-      <!-- Info bar: OS info + uptime + stop button -->
+      <!-- Info bar: OS info + uptime + toggle button -->
       <div class="monitor-info-bar">
         <span v-if="osInfo" class="os-info">
           {{ osInfo.kernel }}
@@ -37,16 +45,27 @@ const uptimeText = computed(() => {
         </span>
         <div class="monitor-info-right">
           <span class="os-info">Up: {{ uptimeText }}</span>
-          <button class="monitor-stop-btn" @click="stop" title="Stop Monitor">
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+          <span v-if="!isCollecting" class="monitor-paused-badge">PAUSED</span>
+          <button
+            class="monitor-toggle-btn"
+            :class="isCollecting ? 'monitor-toggle-stop' : 'monitor-toggle-start'"
+            :title="isCollecting ? 'Stop Monitor' : 'Resume Monitor'"
+            @click="handleToggle"
+          >
+            <!-- Stop icon -->
+            <svg v-if="isCollecting" width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
               <rect x="1" y="1" width="8" height="8" rx="1" />
+            </svg>
+            <!-- Play icon -->
+            <svg v-else width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+              <polygon points="2,1 9,5 2,9" />
             </svg>
           </button>
         </div>
       </div>
 
       <!-- Metric cards grid -->
-      <div class="monitor-body">
+      <div class="monitor-body" :class="{ 'is-paused': !isCollecting }">
         <div class="monitor-grid">
           <CpuGauge
             v-if="settings.monitorShowCpu"

@@ -26,22 +26,51 @@
   gap: 8px;
 }
 
-.monitor-stop-btn {
+/* Toggle button base */
+.monitor-toggle-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 3px;
   border: none;
-  background: rgba(245, 108, 108, 0.12);
-  color: #f56c6c;
   cursor: pointer;
   transition: all 0.15s;
 }
-.monitor-stop-btn:hover {
+
+/* Stop state: red */
+.monitor-toggle-stop {
+  background: rgba(245, 108, 108, 0.12);
+  color: #f56c6c;
+}
+.monitor-toggle-stop:hover {
   background: rgba(245, 108, 108, 0.3);
   color: #ff4d4f;
+}
+
+/* Start/resume state: green */
+.monitor-toggle-start {
+  background: rgba(103, 194, 58, 0.15);
+  color: #67c23a;
+}
+.monitor-toggle-start:hover {
+  background: rgba(103, 194, 58, 0.3);
+  color: #85ce61;
+}
+
+/* Paused badge */
+.monitor-paused-badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: #e6a23c;
+  letter-spacing: 0.5px;
+}
+
+/* Greyed-out overlay when paused */
+.monitor-body.is-paused {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .os-info {
